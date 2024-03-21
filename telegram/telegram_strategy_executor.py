@@ -12,19 +12,13 @@ class TelegramStrategyExecutor(StrategyExecutor):
         return self.queue
 
     def process_event(self, event, payload):
-        # Primero, procesa eventos estándar de la estrategia
-        super().process_event(event, payload)
-        
-        # Ahora, maneja los eventos específicos de Telegram
+        # Process telegram events
         if event == self.TELEGRAM_COMMAND:
-            # Aquí, procesas el comando recibido desde Telegram.
-            # Por ejemplo, podrías querer chequear el tipo de comando
-            # y actuar en consecuencia.
             command = payload["command"]
-            chat_id = payload["chat_id"]
             if command == "/status":
-                # Obtén el estado de la estrategia
                 portfolio_value = self.strategy.get_portfolio_value()
-                message = f"El valor actual del portafolio es: {portfolio_value}"
-                # Usa la instancia del bot de Telegram para enviar el mensaje
+                message = f"Current portfolio value is: {portfolio_value}"
                 self.telegram_bot.send_message(message)
+        
+        # Process other events
+        super().process_event(event, payload)

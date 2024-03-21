@@ -5,7 +5,6 @@ from lumibot.traders import Trader
 from telegram_bot_handler import TelegramBotHandler
 from credentials import AlpacaConfig
 import threading
-import asyncio
 
 class TelegramStrategy(Strategy):
         
@@ -15,21 +14,20 @@ class TelegramStrategy(Strategy):
         self.broker._add_subscriber(self._executor)
         self.telegram_bot.set_receive_message_queue(self._executor.get_queue())
 
-        # Iniciar el bot en su propio hilo y asegurarse de que el bucle de eventos esté corriendo
-        self.bot_thread = threading.Thread(target=self.start_bot_thread, daemon=False)
+        # Init telegram bot in its own thread
+        self.bot_thread = threading.Thread(target=self.telegram_bot.start_bot_thread, daemon=False)
         self.bot_thread.start()
 
-    def start_bot_thread(self):
-        asyncio.run(self.telegram_bot.start())
-
-    # Método ajustado para enviar mensajes directamente desde la estrategia
     def send_message(self, text):
         if self.telegram_bot:
             self.telegram_bot.send_message(text)
         else:
-            print("Error: El bot de Telegram no está configurado correctamente.")
+            self.logger.error("Telegram bot not configured.")
             
     def before_starting_trading(self):
+        self.send_message("before starting trading")
+
+    def on_trading_iteration(self):
         self.send_message("on trading iteration")
 
 if __name__ == "__main__":
