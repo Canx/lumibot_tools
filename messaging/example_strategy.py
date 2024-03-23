@@ -12,6 +12,10 @@ class ExampleStrategy(MessagingStrategy):
     def on_trading_iteration(self):
         self.send_message("on trading iteration")
 
+        if self.first_iteration:
+            self.order = self.create_order("SPY", 1, "buy")
+            self.submit_order(self.order)
+
 if __name__ == "__main__":
     live = True
 
