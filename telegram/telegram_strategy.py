@@ -1,9 +1,5 @@
 from lumibot.strategies import Strategy
 from telegram_strategy_executor import TelegramStrategyExecutor
-from lumibot.brokers import Alpaca
-from lumibot.traders import Trader
-from telegram_bot_handler import TelegramBotHandler
-from credentials import AlpacaConfig
 import threading
 
 class TelegramStrategy(Strategy):
@@ -23,24 +19,12 @@ class TelegramStrategy(Strategy):
             self.telegram_bot.send_message(text)
         else:
             self.logger.error("Telegram bot not configured.")
-            
-    def before_starting_trading(self):
-        self.send_message("before starting trading")
 
-    def on_trading_iteration(self):
-        self.send_message("on trading iteration")
-
-if __name__ == "__main__":
-    live = True
-
-    trader = Trader()
-    broker = Alpaca(AlpacaConfig)
-    strategy = TelegramStrategy(broker, symbol="SPY")
-
-    # Set telegram bot and attach to strategy
-    bot = TelegramBotHandler()
-    strategy.set_telegram_bot(bot)
-
-    # Set trader
-    trader.add_strategy(strategy)
-    trader.run_all()
+    def status_command(self, parameters=None):
+        portfolio_value = self.get_portfolio_value()
+        message = f"Current portfolio value is: {portfolio_value}"
+        
+        return message
+    
+    def hola_command(self, parameters=None):
+        return "Hola"

@@ -14,11 +14,18 @@ class TelegramStrategyExecutor(StrategyExecutor):
     def process_event(self, event, payload):
         # Process telegram events
         if event == self.TELEGRAM_COMMAND:
-            command = payload["command"]
-            if command == "/status":
-                portfolio_value = self.strategy.get_portfolio_value()
-                message = f"Current portfolio value is: {portfolio_value}"
-                self.telegram_bot.send_message(message)
+            command = payload["command"].lstrip('/')
+            method_name = f"{command}_command"
+
+            if hasattr(self.strategy, method_name):
+                method = getattr(self.strategy, method_name)
+                message = method(payload.get("parameters", {}))
+                
+                if message:
+                    self.telegram_bot.send_message(message)
+            else:
+                self.telegram_bot.send_message(f"Command {command} not recognized.")
         
         # Process other events
-        super().process_event(event, payload)
+        else:
+            super().process_event(event, payload)
