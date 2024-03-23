@@ -2,18 +2,18 @@ from lumibot.strategies import StrategyExecutor
 
 class MessagingStrategyExecutor(StrategyExecutor):
     
-    TELEGRAM_COMMAND = "telegram_command"
+    MESSAGE_COMMAND = "message_command"
 
-    def __init__(self, strategy, telegram_bot):
+    def __init__(self, strategy, messaging_bot):
         super().__init__(strategy)
-        self.telegram_bot = telegram_bot
+        self.messaging_bot = messaging_bot
 
     def get_queue(self):
         return self.queue
 
     def process_event(self, event, payload):
         # Process telegram events
-        if event == self.TELEGRAM_COMMAND:
+        if event == self.MESSAGE_COMMAND:
             command = payload["command"].lstrip('/')
             method_name = f"{command}_command"
 
@@ -22,9 +22,9 @@ class MessagingStrategyExecutor(StrategyExecutor):
                 message = method(payload.get("parameters", {}))
                 
                 if message:
-                    self.telegram_bot.send_message(message)
+                    self.messaging_bot.send_message(message)
             else:
-                self.telegram_bot.send_message(f"Command {command} not recognized.")
+                self.messaging_bot.send_message(f"Command {command} not recognized.")
         
         # Process other events
         else:

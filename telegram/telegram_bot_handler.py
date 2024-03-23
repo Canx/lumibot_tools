@@ -45,7 +45,7 @@ class TelegramBotHandler:
             chat_id = message.chat.id
 
             if self.receive_message_queue:
-                self.receive_message_queue.put(("telegram_command", {"command": command, "chat_id": chat_id}))
+                self.receive_message_queue.put(("message_command", {"command": command, "chat_id": chat_id}))
          
     # Esto es propio de la estrategia. No tengo claro si el mensaje "Starting lumibot..." podríamos lanzarlo con self.send_message
     async def start(self):

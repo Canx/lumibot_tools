@@ -21,7 +21,7 @@ if __name__ == "__main__":
 
     # Set telegram bot and attach to strategy
     bot = TelegramBotHandler()
-    strategy.set_telegram_bot(bot)
+    strategy.set_messaging_bot(bot)
 
     # Set trader
     trader.add_strategy(strategy)
