@@ -1,6 +1,6 @@
 from lumibot.strategies import StrategyExecutor
 
-class TelegramStrategyExecutor(StrategyExecutor):
+class MessagingStrategyExecutor(StrategyExecutor):
     
     TELEGRAM_COMMAND = "telegram_command"
 

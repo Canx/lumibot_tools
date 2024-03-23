@@ -1,12 +1,12 @@
 from lumibot.strategies import Strategy
-from telegram_strategy_executor import TelegramStrategyExecutor
+from messaging_strategy_executor import MessagingStrategyExecutor
 import threading
 
-class TelegramStrategy(Strategy):
+class MessagingStrategy(Strategy):
         
     def set_telegram_bot(self, telegram_bot):
         self.telegram_bot = telegram_bot
-        self._executor = TelegramStrategyExecutor(self, self.telegram_bot)
+        self._executor = MessagingStrategyExecutor(self, self.telegram_bot)
         self.broker._add_subscriber(self._executor)
         self.telegram_bot.set_receive_message_queue(self._executor.get_queue())
 
@@ -18,7 +18,7 @@ class TelegramStrategy(Strategy):
         if self.telegram_bot:
             self.telegram_bot.send_message(text)
         else:
-            self.logger.error("Telegram bot not configured.")
+            self.logger.error("Messaging bot not configured.")
 
     def status_command(self, parameters=None):
         portfolio_value = self.get_portfolio_value()
