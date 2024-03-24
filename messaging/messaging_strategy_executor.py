@@ -12,7 +12,7 @@ class MessagingStrategyExecutor(StrategyExecutor):
         return self.queue
 
     def process_event(self, event, payload):
-        # Process telegram events
+        # Process message bot events
         if event == self.MESSAGE_COMMAND:
             command = payload["command"].lstrip('/')
             method_name = f"{command}_command"
