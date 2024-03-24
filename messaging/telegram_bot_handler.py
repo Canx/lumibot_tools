@@ -2,12 +2,12 @@ from aiogram import Bot, Dispatcher
 from aiogram.types import Message
 from credentials import TelegramConfig
 import asyncio
+import threading
 
 class TelegramBotHandler:
     # TODO: Promocionar a clase abstracta, extraer la parte propia de Telegram.
     def __init__(self):
-        self.loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self.loop)
+        self.thread = None
         self.telegram_token = TelegramConfig["TOKEN"]
         self.chat_id = TelegramConfig["CHAT_ID"]
         self.bot = Bot(token=self.telegram_token)
@@ -46,7 +46,18 @@ class TelegramBotHandler:
 
             if self.receive_message_queue:
                 self.receive_message_queue.put(("message_command", {"command": command, "chat_id": chat_id}))
-         
+
+    def start_handler_thread(self):
+        if self.thread is None or not self.thread.is_alive():
+            self.thread = threading.Thread(target=self.run, daemon=True)
+            self.thread.start()
+
+    def run(self):
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
+        self.loop.run_until_complete(self.start())
+        self.loop.close()
+
     # Esto es propio de la estrategia. No tengo claro si el mensaje "Starting lumibot..." podríamos lanzarlo con self.send_message
     async def start(self):
         asyncio.create_task(self.process_send_message_queue())
@@ -54,7 +65,5 @@ class TelegramBotHandler:
         self.send_message("Starting lumibot...")
         await self.dp.start_polling(self.bot, handle_signals=False)
 
-    # TODO: Poner en clase abstracta, para sobreescribir. Llamado por messaging_strategy
-    def start_bot_thread(self):
-        self.loop.run_until_complete(self.start())
-        self.loop.close()
+
+    

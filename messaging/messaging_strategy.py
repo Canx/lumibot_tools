@@ -1,7 +1,6 @@
 from lumibot.strategies import Strategy
 from lumibot.entities import Asset
 from messaging_strategy_executor import MessagingStrategyExecutor
-import threading
 from decimal import Decimal
 
 class MessagingStrategy(Strategy):
@@ -13,8 +12,7 @@ class MessagingStrategy(Strategy):
         self.messaging_bot.set_receive_message_queue(self._executor.get_queue())
 
         # Init messaging bot in its own thread
-        self.bot_thread = threading.Thread(target=self.messaging_bot.start_bot_thread, daemon=False)
-        self.bot_thread.start()
+        self.messaging_bot.start_handler_thread()
 
     def send_message(self, text):
         if self.messaging_bot:
