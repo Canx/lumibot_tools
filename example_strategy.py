@@ -18,13 +18,14 @@ class ExampleStrategy(MessagingStrategy):
         if self.first_iteration:
             self.order = self.create_order("SPY", 1, "buy")
             self.submit_order(self.order)
+            self.send_message("buyed 1 SPY")
 
 if __name__ == "__main__":
     live = True
 
     trader = Trader()
     broker = Alpaca(AlpacaConfig)
-    strategy = ExampleStrategy(broker, symbol="SPY", account_history_db_connection_str="sqlite:///stats.db")
+    strategy = ExampleStrategy(broker)
 
     # Set telegram bot and attach to strategy
     bot = TelegramBotHandler(TelegramConfig)
