@@ -1,6 +1,6 @@
 from lumibot.strategies import Strategy
 from lumibot.entities import Asset
-from messaging_strategy_executor import MessagingStrategyExecutor
+from messaging.messaging_strategy_executor import MessagingStrategyExecutor
 from decimal import Decimal
 
 class MessagingStrategy(Strategy):

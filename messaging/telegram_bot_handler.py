@@ -1,15 +1,15 @@
 from aiogram import Bot, Dispatcher
 from aiogram.types import Message
-from message_base_handler import MessageBaseHandler
+from messaging.message_base_handler import MessageBaseHandler
 from credentials import TelegramConfig
 import asyncio
 
 class TelegramBotHandler(MessageBaseHandler):
 
-    def __init__(self):
+    def __init__(self, telegram_config):
         super().__init__()
-        self.telegram_token = TelegramConfig["TOKEN"]
-        self.chat_id = TelegramConfig["CHAT_ID"]
+        self.telegram_token = telegram_config["TOKEN"]
+        self.chat_id = telegram_config["CHAT_ID"]
         self.bot = Bot(token=self.telegram_token)
         self.dp = Dispatcher()
         self.dp.message.register(self.handle_incoming_message)
