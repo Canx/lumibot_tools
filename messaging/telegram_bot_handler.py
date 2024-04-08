@@ -1,7 +1,6 @@
 from aiogram import Bot, Dispatcher
 from aiogram.types import Message
 from messaging.message_base_handler import MessageBaseHandler
-from credentials import TelegramConfig
 import asyncio
 
 class TelegramBotHandler(MessageBaseHandler):

@@ -5,6 +5,11 @@ from decimal import Decimal
 
 class MessagingStrategy(Strategy):
 
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.messaging_bot = None
+
     # Sets the messaging bot and its executor, then subscribes the executor to the broker.
     # Also starts the messaging bot in its own thread.    
     def set_messaging_bot(self, messaging_bot):
@@ -18,9 +23,7 @@ class MessagingStrategy(Strategy):
     def send_message(self, text):
         if self.messaging_bot:
             self.messaging_bot.send_message(text)
-        else:
-            self.logger.error("Messaging bot not configured.")
-
+        
     # Returns the current portfolio value as a message.
     def status_command(self, parameters=None):
         portfolio_value = self.get_portfolio_value()
@@ -82,12 +85,7 @@ class MessagingStrategy(Strategy):
         message = "\n".join(line.lstrip() for line in message.split("\n"))
 
         return message
-    
-    
-    def after_market_closes(self):
-        #self.calculate_returns()
-        pass
-        
+            
     
     # Logs and sends a message when an order is filled, detailing the trade and its impact on the portfolio.
     def on_filled_order(self, position, order, price, quantity, multiplier):

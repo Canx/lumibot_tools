@@ -105,7 +105,7 @@ def run_strategy(strategy_class, is_live, broker_choice, start_date, end_date):
             PolygonDataBacktesting,
             backtesting_start,
             backtesting_end,
-            polygon_api_key=POLYGON_CONFIG["API_KEY"],
+            polygon_api_key=POLYGON_CONFIG["KEY"],
             polygon_has_paid_subscription=True,
             benchmark_asset=benchmark_asset,
             risk_free_rate=risk_free_rate,
