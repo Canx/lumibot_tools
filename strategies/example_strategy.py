@@ -1,7 +1,7 @@
 from lumibot.brokers import Alpaca
 from lumibot.traders import Trader
-from messaging.messaging_strategy import MessagingStrategy
-from messaging.telegram_bot_handler import TelegramBotHandler
+from lumibot_tools.messaging.messaging_strategy import MessagingStrategy
+from lumibot_tools.messaging.telegram_bot_handler import TelegramBotHandler
 from credentials import AlpacaConfig, TelegramConfig
 
 class ExampleStrategy(MessagingStrategy):
