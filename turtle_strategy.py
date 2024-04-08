@@ -4,7 +4,7 @@ from lumibot.traders import Trader
 from lumibot.entities import TradingFee, Asset
 from lumibot.backtesting import PolygonDataBacktesting
 from lumibot_tools.messaging import MessagingStrategy, TelegramBotHandler
-from credentials import ALPACA_CONFIG, TELEGRAM_CONFIG, POLYGON_CONFIG
+from config import ALPACA_CONFIG, TELEGRAM_CONFIG, POLYGON_CONFIG
 import datetime
 import pandas as pd
 from math import floor
