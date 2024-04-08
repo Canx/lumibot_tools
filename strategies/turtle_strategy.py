@@ -5,7 +5,7 @@ from lumibot.entities import TradingFee, Asset
 from lumibot.backtesting import PolygonDataBacktesting
 from messaging.messaging_strategy import MessagingStrategy
 from messaging.telegram_bot_handler import TelegramBotHandler
-from credentials import AlpacaConfig, TelegramConfig, PolygonConfig
+from credentials import ALPACA_CONFIG, TELEGRAM_CONFIG, POLYGON_CONFIG
 import datetime
 import pandas as pd
 from math import floor
@@ -391,11 +391,11 @@ if __name__ == "__main__":
 
     if is_live:
         trader = Trader()
-        broker = Alpaca(AlpacaConfig)
+        broker = Alpaca(ALPACA_CONFIG)
         strategy = TurtleStrategy(broker)
 
         # Set telegram bot and attach to strategy
-        bot = TelegramBotHandler(TelegramConfig)
+        bot = TelegramBotHandler(TELEGRAM_CONFIG)
         strategy.set_messaging_bot(bot)
 
         # Set trader
@@ -412,7 +412,7 @@ if __name__ == "__main__":
             PolygonDataBacktesting,
             backtesting_start,
             backtesting_end,
-            polygon_api_key=PolygonConfig["KEY"],
+            polygon_api_key=POLYGON_CONFIG["KEY"],
             polygon_has_paid_subscription=False,
             buy_trading_fees=[trading_fee],
             sell_trading_fees=[trading_fee],

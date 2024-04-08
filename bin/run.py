@@ -6,8 +6,9 @@ import inspect
 from datetime import datetime, timedelta
 from lumibot.traders import Trader
 from lumibot.entities import TradingFee, Asset
+
+sys.path.insert(0, os.getcwd())
 import credentials
-print(credentials.__file__)
 
 def parse_arguments():
     """Parse command line arguments for running the strategy."""
