@@ -3,8 +3,7 @@ from lumibot.brokers import Alpaca
 from lumibot.traders import Trader
 from lumibot.entities import TradingFee, Asset
 from lumibot.backtesting import PolygonDataBacktesting
-from lumibot_tools.messaging.messaging_strategy import MessagingStrategy
-from lumibot_tools.messaging.telegram_bot_handler import TelegramBotHandler
+from lumibot_tools.messaging import MessagingStrategy, TelegramBotHandler
 from credentials import ALPACA_CONFIG, TELEGRAM_CONFIG, POLYGON_CONFIG
 import datetime
 import pandas as pd

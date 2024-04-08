@@ -1,8 +1,7 @@
 from lumibot.brokers import Alpaca
 from lumibot.traders import Trader
-from lumibot_tools.messaging.messaging_strategy import MessagingStrategy
-from lumibot_tools.messaging.telegram_bot_handler import TelegramBotHandler
-from credentials import AlpacaConfig, TelegramConfig
+from lumibot_tools.messaging import MessagingStrategy, TelegramBotHandler
+from credentials import ALPACA_CONFIG, TELEGRAM_CONFIG
 
 class ExampleStrategy(MessagingStrategy):
     
@@ -24,11 +23,11 @@ if __name__ == "__main__":
     live = True
 
     trader = Trader()
-    broker = Alpaca(AlpacaConfig)
+    broker = Alpaca(ALPACA_CONFIG)
     strategy = ExampleStrategy(broker)
 
     # Set telegram bot and attach to strategy
-    bot = TelegramBotHandler(TelegramConfig)
+    bot = TelegramBotHandler(TELEGRAM_CONFIG)
     strategy.set_messaging_bot(bot)
 
     # Set trader
