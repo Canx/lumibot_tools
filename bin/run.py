@@ -85,29 +85,43 @@ def run_strategy(strategy_class, is_live, broker_choice, start_date, end_date):
     else:
         # Setting up for backtesting
         from lumibot.backtesting import PolygonDataBacktesting
-        from credentials import POLYGON_CONFIG
+        try:
+            from credentials import POLYGON_CONFIG, BACKTESTING_CONFIG
+        except ImportError as e:
+            # Imprime un mensaje de error específico basado en la configuración faltante
+            missing_config = str(e).split("named ")[-1]
+            print(f"Error: La configuración '{missing_config}' no se encontró en 'credentials.py'.")
+            exit(1)
+        
+        percent_fee = BACKTESTING_CONFIG['PERCENT_FEE']
+        trading_fee = TradingFee(percent_fee=percent_fee)
+        risk_free_rate = BACKTESTING_CONFIG['RISK_FREE_RATE']
+        benchmark_asset = BACKTESTING_CONFIG['BENCHMARK']
 
-        # Getting yesterday's date
-        yesterday = datetime.now() - timedelta(days=1)
-
-        # Calculating one year from yesterday
-        one_year_from_yesterday = yesterday - timedelta(days=365)
-
-        # Setting the start and end dates for backtesting
-        backtesting_start = start_date if start_date else one_year_from_yesterday
-        backtesting_end = end_date if end_date else yesterday
-        trading_fee = TradingFee(percent_fee=0.005)
-        benchmark_asset = get_benchmark_asset(broker_choice)
-        risk_free_rate = 5.233  # Fixed risk-free rate for backtesting
-
+        # Intenta obtener y validar las fechas de inicio y finalización
+        try:
+            start_date_str = BACKTESTING_CONFIG['START_DATE']
+            end_date_str = BACKTESTING_CONFIG['END_DATE']
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+            
+            # Asegurarse de que la fecha de inicio no es posterior a la fecha de finalización
+            if start_date >= end_date:
+                raise ValueError("La fecha de inicio debe ser anterior a la fecha de finalización.")
+        except KeyError:
+            print("Error: Las fechas de inicio y finalización deben estar definidas en BACKTESTING_CONFIG.")
+            exit(1)
+        except ValueError as e:
+            print(f"Error en las fechas de BACKTESTING_CONFIG: {e}")
+            exit(1)
 
         print("Starting Backtest...")
         strategy_class.backtest(
             PolygonDataBacktesting,
-            backtesting_start,
-            backtesting_end,
+            start_date,
+            end_date,
             polygon_api_key=POLYGON_CONFIG["KEY"],
-            polygon_has_paid_subscription=True,
+            polygon_has_paid_subscription=POLYGON_CONFIG["PAID"],
             benchmark_asset=benchmark_asset,
             risk_free_rate=risk_free_rate,
             buy_trading_fees=[trading_fee],
