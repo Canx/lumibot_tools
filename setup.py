@@ -6,6 +6,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         'lumibot',  # Añade lumibot como una dependencia
+        'aiogram'
     ],
     scripts=['bin/run.py'],
     # Más metadata:
