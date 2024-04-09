@@ -86,11 +86,11 @@ def run_strategy(strategy_class, is_live, broker_choice, start_date, end_date):
         # Setting up for backtesting
         from lumibot.backtesting import PolygonDataBacktesting
         try:
-            from credentials import POLYGON_CONFIG, BACKTESTING_CONFIG
+            from config import POLYGON_CONFIG, BACKTESTING_CONFIG
         except ImportError as e:
             # Imprime un mensaje de error específico basado en la configuración faltante
             missing_config = str(e).split("named ")[-1]
-            print(f"Error: La configuración '{missing_config}' no se encontró en 'credentials.py'.")
+            print(f"Error: La configuración '{missing_config}' no se encontró en 'config.py'.")
             exit(1)
         
         percent_fee = BACKTESTING_CONFIG['PERCENT_FEE']

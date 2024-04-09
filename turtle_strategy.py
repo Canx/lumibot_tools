@@ -1,5 +1,3 @@
-from lumibot.brokers import Alpaca
-
 from lumibot.traders import Trader
 from lumibot.entities import TradingFee, Asset
 from lumibot.backtesting import PolygonDataBacktesting
@@ -389,6 +387,7 @@ if __name__ == "__main__":
     is_live = False
 
     if is_live:
+        from lumibot.brokers import Alpaca
         trader = Trader()
         broker = Alpaca(ALPACA_CONFIG)
         strategy = TurtleStrategy(broker)
