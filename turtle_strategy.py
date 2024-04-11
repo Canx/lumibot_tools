@@ -2,11 +2,9 @@ from lumibot.traders import Trader
 from lumibot.entities import TradingFee, Asset
 from lumibot.backtesting import PolygonDataBacktesting
 from lumibot_tools.messaging import MessagingStrategy, TelegramBotHandler
-from config import ALPACA_CONFIG, TELEGRAM_CONFIG, POLYGON_CONFIG
 import datetime
 import pandas as pd
 from math import floor
-from decimal import Decimal
 
 
 class TurtleStrategy(MessagingStrategy):
@@ -354,9 +352,6 @@ class TurtleStrategy(MessagingStrategy):
     # Cantidad ganada, winner/losser,
     def on_filled_order(self, position, order, price, quantity, multiplier):
 
-        price_decimal = Decimal(str(price))
-        #quantity_decimal = Decimal(str(quantity))
-
         system_used = order.custom_params['system_used']
         key = f"{position.symbol}_{system_used}"
 
@@ -364,11 +359,11 @@ class TurtleStrategy(MessagingStrategy):
             self.position_metadata[key] = {'cost': 0, 'quantity': 0, 'sales_revenue': 0}
         
         if order.side == 'buy':
-            self.position_metadata[key]['cost'] += Decimal(str(price)) * quantity
+            self.position_metadata[key]['cost'] += price * quantity
             self.position_metadata[key]['quantity'] += quantity
             self.position_metadata[key]['last_price'] = price
         elif order.side == 'sell':
-            self.position_metadata[key]['sales_revenue'] += price_decimal * quantity
+            self.position_metadata[key]['sales_revenue'] += price * quantity
             self.position_metadata[key]['quantity'] -= quantity
             if self.position_metadata[key]['quantity'] == 0:
                 # Determina si la subposición fue ganadora y realiza acciones adecuadas
@@ -388,6 +383,7 @@ if __name__ == "__main__":
 
     if is_live:
         from lumibot.brokers import Alpaca
+        from config import ALPACA_CONFIG, TELEGRAM_CONFIG
         trader = Trader()
         broker = Alpaca(ALPACA_CONFIG)
         strategy = TurtleStrategy(broker)
@@ -400,6 +396,7 @@ if __name__ == "__main__":
         trader.add_strategy(strategy)
         trader.run_all()
     else:
+        from config import POLYGON_CONFIG
         backtesting_start = datetime.datetime(2023, 6, 1)
         backtesting_end = datetime.datetime(2023, 12, 1)
         trading_fee = TradingFee(percent_fee=0.001)
@@ -411,7 +408,7 @@ if __name__ == "__main__":
             backtesting_start,
             backtesting_end,
             polygon_api_key=POLYGON_CONFIG["KEY"],
-            polygon_has_paid_subscription=False,
+            polygon_has_paid_subscription=POLYGON_CONFIG["PAID"],
             buy_trading_fees=[trading_fee],
             sell_trading_fees=[trading_fee],
             benchmark_asset="SPY",
