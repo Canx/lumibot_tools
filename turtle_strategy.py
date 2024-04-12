@@ -33,14 +33,16 @@ class TurtleStrategy(MessagingStrategy):
         self.current_system_is_1 = True
 
     def on_trading_iteration(self):
+        self.log_message(f"risk_free_rate (oti): {self.risk_free_rate}")
         historical_data = self.get_and_check_historical_data()
 
         if self.current_system_is_1:
-            self.check_for_entries(historical_data, TurtleStrategy.SYSTEM_1)
             self.check_for_exits(historical_data, TurtleStrategy.SYSTEM_1)
+            self.check_for_entries(historical_data, TurtleStrategy.SYSTEM_1)
+            
         else:
-            self.check_for_entries(historical_data, TurtleStrategy.SYSTEM_2)
             self.check_for_exits(historical_data, TurtleStrategy.SYSTEM_2)
+            self.check_for_entries(historical_data, TurtleStrategy.SYSTEM_2)
 
         self.current_system_is_1 = not(self.current_system_is_1)
         
@@ -149,8 +151,12 @@ class TurtleStrategy(MessagingStrategy):
 
     def calculate_stop_loss(self, current_price, atr, direction):
         stop_loss = None
+
+        # TODO: Añadir el riesgo máximo. max(ATR*r, self.risk_per_trade*current_price)
         if direction == "long":
-            stop_loss = current_price - (atr * self.risk_multiplier)
+            stop_loss_atr = current_price - (atr * self.risk_multiplier)
+            stop_loss_max = current_price - (current_price * self.risk_per_trade)
+            stop_loss = min(stop_loss_atr, stop_loss_max)
         elif direction == "short":
             stop_loss = current_price + (atr * self.risk_multiplier)
         else:
@@ -351,7 +357,7 @@ class TurtleStrategy(MessagingStrategy):
     # Aquí deberíamos calcular y guardar información de la posición
     # Cantidad ganada, winner/losser,
     def on_filled_order(self, position, order, price, quantity, multiplier):
-
+        self.log_message(f"risk_free_rate (ofo): {self.risk_free_rate}")
         system_used = order.custom_params['system_used']
         key = f"{position.symbol}_{system_used}"
 
@@ -378,6 +384,10 @@ class TurtleStrategy(MessagingStrategy):
                 del self.position_metadata[key]
         
         #self.log_message(f"Position metadata for {key}:{self.position_metadata[key]}")
+
+    def on_strategy_end(self):
+        self.log_message(f"risk_free_rate: {self.risk_free_rate}" )
+
 if __name__ == "__main__":
     is_live = False
 
@@ -412,4 +422,4 @@ if __name__ == "__main__":
             buy_trading_fees=[trading_fee],
             sell_trading_fees=[trading_fee],
             benchmark_asset="SPY",
-            risk_free_rate=5.32)
+            risk_free_rate=0.0532)
