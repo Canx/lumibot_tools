@@ -37,14 +37,18 @@ class TurtleStrategy(MessagingStrategy):
     def on_trading_iteration(self):
         historical_data = self.get_and_check_historical_data()
 
-        if self.current_system_is_1:
-            self.check_for_entries(historical_data, TurtleStrategy.SYSTEM_1)
-            self.check_for_exits(historical_data, TurtleStrategy.SYSTEM_1)
-        else:
-            self.check_for_entries(historical_data, TurtleStrategy.SYSTEM_2)
-            self.check_for_exits(historical_data, TurtleStrategy.SYSTEM_2)
+        self.check_for_stoploss(historical_data, TurtleStrategy.SYSTEM_2)
+        self.check_for_exits(historical_data, TurtleStrategy.SYSTEM_2)
+        self.check_for_entries(historical_data, TurtleStrategy.SYSTEM_2)
+        
+        #self.check_for_entries(historical_data, TurtleStrategy.SYSTEM_1)
+        #self.check_for_exits(historical_data, TurtleStrategy.SYSTEM_1)
+        #if self.current_system_is_1:
+            
+        #else:
+            
 
-        self.current_system_is_1 = not(self.current_system_is_1)
+        #self.current_system_is_1 = not(self.current_system_is_1)
         
     def get_and_check_historical_data(self):
         length = max(self.breakout_period, self.exit_period, self.atr_period) + self.atr_period + 1
@@ -174,6 +178,10 @@ class TurtleStrategy(MessagingStrategy):
             self.log_message("Error calculating stop_loss")
 
         return stop_loss
+
+    # Comprobar cada posición y ver si ha llegado a su stop-loss, en cuyo caso lanzar orden de mercado.
+    def check_for_stoploss(self, historical_data, system):
+        pass
 
     def check_for_entries(self, historical_data, system):
         for asset, data in historical_data.items():
