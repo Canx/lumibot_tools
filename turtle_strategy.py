@@ -19,6 +19,8 @@ class TurtleStrategy(MessagingStrategy):
         self.sleeptime = "1D"
         self.minutes_before_closing = 5
         #self.assets = ["SPY", "AAPL", "MSFT", "GOOG", "AMZN", "NVDA"]
+        self.max_assets = 20 # Maximum number of assets to trade
+        self.max_initial_position = 0.05 # Maximum percentage of cash in initial position per asset
         self.assets = ["SPY"]
         self.position_metadata = {}  # Clave: ID de posición o símbolo, Valor: diccionario de metadatos
         self.breakout_period = 20
@@ -33,16 +35,14 @@ class TurtleStrategy(MessagingStrategy):
         self.current_system_is_1 = True
 
     def on_trading_iteration(self):
-        self.log_message(f"risk_free_rate (oti): {self.risk_free_rate}")
         historical_data = self.get_and_check_historical_data()
 
         if self.current_system_is_1:
-            self.check_for_exits(historical_data, TurtleStrategy.SYSTEM_1)
             self.check_for_entries(historical_data, TurtleStrategy.SYSTEM_1)
-            
+            self.check_for_exits(historical_data, TurtleStrategy.SYSTEM_1)
         else:
-            self.check_for_exits(historical_data, TurtleStrategy.SYSTEM_2)
             self.check_for_entries(historical_data, TurtleStrategy.SYSTEM_2)
+            self.check_for_exits(historical_data, TurtleStrategy.SYSTEM_2)
 
         self.current_system_is_1 = not(self.current_system_is_1)
         
@@ -75,8 +75,23 @@ class TurtleStrategy(MessagingStrategy):
             # para permitir una operación basada en la nueva señal de breakout.
             return False
 
+    def calculate_extra_position_size(self, current_price, last_entry_price, atr, system_units):
+        HALF_N = atr / 2  # 1/2 N para añadir una unidad.
+        price_movement = current_price - last_entry_price
 
-    def calculate_position_size(self, asset, atr):
+        # Esto calcula cuántas medias N caben en el movimiento de precio
+        potential_units_to_add = int(price_movement / HALF_N)  
+
+        # Asegúrate de no superar el máximo de unidades permitidas
+        actual_units_to_add = min(potential_units_to_add, self.MAX_UNITS - system_units)
+
+        if actual_units_to_add > 0:
+            return actual_units_to_add
+        else:
+            return 0
+
+    
+    def calculate_initial_position_size(self, asset, atr):
         # Obtener el último precio del activo
         current_price = self.get_last_price(asset)
 
@@ -105,7 +120,7 @@ class TurtleStrategy(MessagingStrategy):
         position_size = risk_amount / dollar_volatility
 
         # Ajuste para no superar el 50% del efectivo disponible
-        max_cash_to_use = total_capital * 0.90 + 1000  # Usar solo hasta el 90% del efectivo disponible y 1000 de reserva
+        max_cash_to_use = total_capital * self.max_initial_position  # Usar solo hasta el 5% del efectivo disponible
         cash_needed_for_position = current_price * position_size  # Calcula el efectivo necesario para la posición calculada
 
         # Si el efectivo necesario supera el máximo permitido, ajustar la posición
@@ -151,12 +166,8 @@ class TurtleStrategy(MessagingStrategy):
 
     def calculate_stop_loss(self, current_price, atr, direction):
         stop_loss = None
-
-        # TODO: Añadir el riesgo máximo. max(ATR*r, self.risk_per_trade*current_price)
         if direction == "long":
-            stop_loss_atr = current_price - (atr * self.risk_multiplier)
-            stop_loss_max = current_price - (current_price * self.risk_per_trade)
-            stop_loss = min(stop_loss_atr, stop_loss_max)
+            stop_loss = current_price - (atr * self.risk_multiplier)
         elif direction == "short":
             stop_loss = current_price + (atr * self.risk_multiplier)
         else:
@@ -205,20 +216,21 @@ class TurtleStrategy(MessagingStrategy):
         
         # Diferenciamos si ya estamos en una posición o no!
         if system_quantity > 0:
-            if self.should_add_to_position(asset, atr, system_quantity, system_last_price, system_units):
-                unit_quantity = self.calculate_position_size(asset, atr)
+            unit_quantity = self.calculate_extra_position_size(self, current_price, system_last_price, atr, system_units)
+            
+            if unit_quantity > 0:
                 direction = "long" if system_quantity > 0 else "short"
                 stop_loss_price = self.calculate_stop_loss(current_price, atr, direction)
                 self.log_message(f"Añadiendo a posición {asset} {direction} {unit_quantity}")
 
         else:
-            # Determina si se debería abrir o añadir a una posición
+            # Determina si se debería abrir una posición
             direction = self.check_direction_breakout(current_price, df, system)
             
-            # Si hay dirección determinada, procede a abrir o añadir a la posición
+            # Si hay dirección determinada, procede a abrir a la posición
             if direction:
                 # Determina el número de unidades a abrir basado en el ATR y el tamaño de posición calculado
-                unit_quantity = self.calculate_position_size(asset, atr)
+                unit_quantity = self.calculate_initial_position_size(asset, atr)
                 stop_loss_price = self.calculate_stop_loss(current_price, atr, direction)
                 
             # Llama directamente a open_position con los parámetros necesarios
@@ -303,6 +315,9 @@ class TurtleStrategy(MessagingStrategy):
             #self.log_message(f"No se puede abrir una posición para {asset_symbol} debido a que la cantidad calculada es 0.")
             return
 
+        if direction is None:
+            return
+        
         # Traduce la dirección de 'long'/'short' a 'buy'/'sell'
         order_side = "buy" if direction == "long" else "sell"
         
@@ -357,7 +372,7 @@ class TurtleStrategy(MessagingStrategy):
     # Aquí deberíamos calcular y guardar información de la posición
     # Cantidad ganada, winner/losser,
     def on_filled_order(self, position, order, price, quantity, multiplier):
-        self.log_message(f"risk_free_rate (ofo): {self.risk_free_rate}")
+
         system_used = order.custom_params['system_used']
         key = f"{position.symbol}_{system_used}"
 
@@ -384,10 +399,6 @@ class TurtleStrategy(MessagingStrategy):
                 del self.position_metadata[key]
         
         #self.log_message(f"Position metadata for {key}:{self.position_metadata[key]}")
-
-    def on_strategy_end(self):
-        self.log_message(f"risk_free_rate: {self.risk_free_rate}" )
-
 if __name__ == "__main__":
     is_live = False
 
@@ -422,4 +433,4 @@ if __name__ == "__main__":
             buy_trading_fees=[trading_fee],
             sell_trading_fees=[trading_fee],
             benchmark_asset="SPY",
-            risk_free_rate=0.0532)
+            risk_free_rate=0.532)
