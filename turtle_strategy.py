@@ -365,9 +365,10 @@ class TurtleStrategy(MessagingStrategy):
             self.submit_order(close_order)
             #self.wait_for_order_execution(close_order)
 
-    def determine_if_position_was_winner(self, key):
+    def calculate_position_profit_loss(self, key):
         metadata = self.position_metadata[key]
-        return metadata['sales_revenue'] > metadata['cost']
+        balance = metadata['sales_revenue'] - metadata['cost']
+        return balance
 
     # Aquí deberíamos calcular y guardar información de la posición
     # Cantidad ganada, winner/losser,
@@ -379,21 +380,23 @@ class TurtleStrategy(MessagingStrategy):
         if key not in self.position_metadata:
             self.position_metadata[key] = {'cost': 0, 'quantity': 0, 'sales_revenue': 0}
         
+        detail_text = f"{quantity}x{price} of {position.symbol}. System: {system_used}"
         if order.side == 'buy':
             self.position_metadata[key]['cost'] += price * quantity
             self.position_metadata[key]['quantity'] += quantity
             self.position_metadata[key]['last_price'] = price
+            self.add_marker("Buy", symbol="triangle-up", value=price, color="blue", detail_text=detail_text)
         elif order.side == 'sell':
             self.position_metadata[key]['sales_revenue'] += price * quantity
             self.position_metadata[key]['quantity'] -= quantity
             if self.position_metadata[key]['quantity'] == 0:
                 # Determina si la subposición fue ganadora y realiza acciones adecuadas
-                was_winner = self.determine_if_position_was_winner(key)
+                balance = self.calculate_position_profit_loss(key)
                 
-                color = "green" if was_winner else "red"
-                #self.add_marker("Closed", symbol="circle", color=color)
+                color = "green" if balance > 0 else "red"
+                self.add_marker("Closed", symbol="circle", value=price, color=color, detail_text=detail_text + f" Balance: {balance}")
                 # Actualiza last_breakout_results con el resultado del último trade
-                self.last_breakout_results[key] = was_winner
+                self.last_breakout_results[key] = balance > 0
         
                 # Ya que la posición está cerrada, podrías decidir limpiar los datos de posición_metadata para este key
                 del self.position_metadata[key]
