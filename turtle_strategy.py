@@ -54,10 +54,26 @@ class TurtleStrategy(MessagingStrategy):
             foverview.set_filter(filters_dict=filters_dict)
             df = foverview.screener_view()
 
+            # TODO: Que pasa si no devuelve ningun símbolo?
+            print(df)
             symbol_list = df['Ticker'].tolist()
+        
+            # Añadimos los símbolos de las posiciones actuales
+            symbol_list = self.get_position_symbols() + symbol_list
+
+            # Quitamos duplicados manteniendo el orden
+            symbol_list = list(dict.fromkeys(symbol_list))
         
             return symbol_list
 
+    def get_position_symbols(self):
+        # Obtenemos la lista de posiciones
+        positions = self.get_positions()
+        
+        # Usamos una comprensión de lista para extraer los símbolos
+        symbols = [position.symbol for position in positions]
+        
+        return symbols
 
     def on_trading_iteration(self):
         historical_data = self.get_and_check_historical_data()
@@ -436,7 +452,7 @@ class TurtleStrategy(MessagingStrategy):
         
         #self.log_message(f"Position metadata for {key}:{self.position_metadata[key]}")
 if __name__ == "__main__":
-    is_live = False
+    is_live = True
 
     if is_live:
         from lumibot.brokers import Alpaca
