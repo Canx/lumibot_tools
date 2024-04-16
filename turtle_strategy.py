@@ -12,14 +12,13 @@ class TurtleStrategy(MessagingStrategy):
     SYSTEM_1 = 1
     SYSTEM_2 = 2
     # Determina el número máximo de unidades permitidas
-    MAX_UNITS = 12  # Ejemplo: máximo de 4 unidades
-        
+    MAX_UNITS = 12  # Ejemplo: máximo de 4 unidades, a 2% por unidad: 24%
 
     def initialize(self):
         self.sleeptime = "1D"
         self.minutes_before_closing = 5
         #self.assets = ["SPY", "AAPL", "MSFT", "GOOG", "AMZN", "NVDA"]
-        self.assets = ["SPY"]
+        self.assets = self.get_assets()
         self.position_metadata = {}  # Clave: ID de posición o símbolo, Valor: diccionario de metadatos
         self.breakout_period = 20
         self.breakout_long_period = 55
@@ -31,6 +30,32 @@ class TurtleStrategy(MessagingStrategy):
         self.last_breakout_results = {}  # Ejemplo: {'AAPL_System1': {'was_winner': True, 'direction': 'long'}}
         self.position_metadata = {}
         self.current_system_is_1 = True
+
+    def get_assets(self):
+        if self.is_backtesting:
+            return ["SPY"]
+        else:
+            # TODO: Añadir assets actuales del broker 
+            from finvizfinance.screener.overview import Overview
+
+            foverview = Overview()
+            filters_dict = {
+                'Current Volume': 'Over 1M',
+                'Beta': 'Over 1',
+                'Performance': 'Month +10%',
+                'Performance 2': 'Year +30%',
+                'RSI (14)': 'Not Overbought (<60)',
+                '200-Day Simple Moving Average': 'Price above SMA200',
+                '50-Day Simple Moving Average': 'Price above SMA50',
+                'Gap': 'Up'
+            }
+            foverview.set_filter(filters_dict=filters_dict)
+            df = foverview.screener_view()
+
+            symbol_list = df['Ticker'].tolist()
+        
+            return symbol_list
+
 
     def on_trading_iteration(self):
         self.log_message(f"risk_free_rate (oti): {self.risk_free_rate}")
