@@ -14,7 +14,7 @@ class TurtleStrategy(MessagingStrategy):
     # Determina el número máximo de unidades permitidas
     MAX_UNITS = 12  # Ejemplo: máximo de 4 unidades, a 2% por unidad: 24%
 
-    def initialize(self):
+    def initialize(self, parameters=None):
         self.sleeptime = "1D"
         self.minutes_before_closing = 5
         #self.assets = ["SPY", "AAPL", "MSFT", "GOOG", "AMZN", "NVDA"]
@@ -265,7 +265,8 @@ class TurtleStrategy(MessagingStrategy):
         
         # Diferenciamos si ya estamos en una posición o no!
         if system_quantity > 0:
-            unit_quantity = self.calculate_extra_position_size(self, current_price, system_last_price, atr, system_units)
+            self.log_message(f"evaluate extra position signals {key}")
+            unit_quantity = self.calculate_extra_position_size(current_price, system_last_price, atr, system_units)
             
             if unit_quantity > 0:
                 direction = "long" if system_quantity > 0 else "short"
@@ -273,6 +274,7 @@ class TurtleStrategy(MessagingStrategy):
                 self.log_message(f"Añadiendo a posición {asset} {direction} {unit_quantity}")
 
         else:
+            self.log_message(f"evaluate entry signals {key}")
             # Determina si se debería abrir una posición
             direction = self.check_direction_breakout(current_price, df, system)
             
