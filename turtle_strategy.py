@@ -397,7 +397,7 @@ class TurtleStrategy(MessagingStrategy):
             limit_price=entry_price,
             stop_loss_price=stop_loss_price,
             take_profit_price=take_profit_price,
-            #type="bracket",
+            type="bracket",
             custom_params={'system_used': system_used,
                            'is_breakout': is_breakout}
         )
@@ -429,18 +429,35 @@ class TurtleStrategy(MessagingStrategy):
         balance = metadata['sales_revenue'] - metadata['cost']
         return balance
 
+    def on_canceled_order(self, order):
+        self.log_message(f"{order} has been canceled by the broker")
+
     # Aquí deberíamos calcular y guardar información de la posición
     # Cantidad ganada, winner/losser,
     def on_filled_order(self, position, order, price, quantity, multiplier):
         # Si order.order_class es None y order.stop_price tiene un valor entonces
         # es una orden stop_loss
+        
+        self.log_message(f"Order id: {order.identifier}")
         self.log_message(f"Order status: {order.status}" )
+        self.log_message(f"Order time_in_force: {order.time_in_force}")
         self.log_message(f"Order class: {order.order_class}")
+        self.log_message(f"Order direction: {order.side}")
         self.log_message(f"Order quantity: {quantity}" )
         self.log_message(f"Order price: {price}")
-        self.log_message(f"Order stop-loss: {order.stop_price}")
-        self.log_message(f"Dependent order: {order.dependent_order}")
+        self.log_message(f"Order stop-loss: {order.stop_loss_price}") 
+        self.log_message(f"Custom params: {order.custom_params}")
+        if order.dependent_order:
+            self.log_message(f"Dependent order: {order.dependent_order}")
+            self.log_message(f"Dependent order id: {order.dependent_order.identifier}")
+            self.log_message(f"Dependent order customs params: {order.dependent_order.custom_params}")
+            if order.dependent_order.dependent_order:
+                self.log_message(f"dependent-dependent order customs params: {order.dependent_order.dependent_order.custom_params}")
 
+        if order.order_class is None:
+            self.log_message("No registramos nada. Suponemos cancelled")
+            return
+        
         system_used = order.custom_params['system_used']
         key = f"{position.symbol}_{system_used}"
 
