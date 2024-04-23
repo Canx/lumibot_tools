@@ -390,21 +390,40 @@ class TurtleStrategy(MessagingStrategy):
         
         # Crear la orden
         self.log_message(f"stop_loss_price: {stop_loss_price}")
-        order = self.create_order(
-            asset=Asset(asset_symbol),
+
+        self.open_limit_order(asset_symbol,
             quantity=abs(quantity),
             side=order_side,
             limit_price=entry_price,
             stop_loss_price=stop_loss_price,
             take_profit_price=take_profit_price,
-            type="bracket",
             custom_params={'system_used': system_used,
-                           'is_breakout': is_breakout}
-        )
+                           'is_breakout': is_breakout})
         
-        self.submit_order(order)
         #self.wait_for_order_execution(order)
     
+    # TODO: Guardar en un registro la orden creada.
+    def open_limit_order(self, asset_symbol, quantity, side, limit_price, stop_loss_price, take_profit_price, custom_params):
+        order = self.create_order(
+            asset=Asset(asset_symbol),
+            quantity=abs(quantity),
+            side=side,
+            limit_price=limit_price,
+            stop_loss_price=stop_loss_price,
+            take_profit_price=take_profit_price,
+            custom_params=custom_params,
+            type="limit"
+        )
+
+        # TODO: Guardar la orden para generar los stop-loss
+        # y para hacer estadísticas
+
+        self.submit_order(order)
+ 
+    # TODO: Para vender al tocar stop-loss o al salir de posición
+    def open_market_order(self):
+        pass
+
     def close_position(self, position, system_used, current_price=None):
         key = f"{position.symbol}_{system_used}"
         metadata = self.position_metadata[key]
@@ -429,31 +448,41 @@ class TurtleStrategy(MessagingStrategy):
         balance = metadata['sales_revenue'] - metadata['cost']
         return balance
 
+
+    def _print_order(self, order):
+        self.log_message(f"Order id: {order.identifier}")
+        self.log_message(f"Order status: {order.status}" )
+        self.log_message(f"Order time_in_force: {order.time_in_force}")
+        self.log_message(f"Order class: {order.order_class}")
+        self.log_message(f"Order type: {order.type}")
+        self.log_message(f"Order direction: {order.side}")
+        self.log_message(f"Order stop-loss: {order.stop_loss_price}") 
+        self.log_message(f"Custom params: {order.custom_params}")
+
+    def print_order(self, order):
+        self._print_order(order)
+
+        if order.dependent_order:
+            self.log_message(f"dependent order:")
+            self._print_order(order.dependent_order)
+            
+
     def on_canceled_order(self, order):
         self.log_message(f"{order} has been canceled by the broker")
 
     # Aquí deberíamos calcular y guardar información de la posición
     # Cantidad ganada, winner/losser,
     def on_filled_order(self, position, order, price, quantity, multiplier):
+        # TODO: Actualizar los datos de la orden si existe
+
         # Si order.order_class es None y order.stop_price tiene un valor entonces
         # es una orden stop_loss
+        self.log_message(position)
+        self.log_message(f"Quantity: {quantity}" )
+        self.log_message(f"Price: {price}")
         
-        self.log_message(f"Order id: {order.identifier}")
-        self.log_message(f"Order status: {order.status}" )
-        self.log_message(f"Order time_in_force: {order.time_in_force}")
-        self.log_message(f"Order class: {order.order_class}")
-        self.log_message(f"Order direction: {order.side}")
-        self.log_message(f"Order quantity: {quantity}" )
-        self.log_message(f"Order price: {price}")
-        self.log_message(f"Order stop-loss: {order.stop_loss_price}") 
-        self.log_message(f"Custom params: {order.custom_params}")
-        if order.dependent_order:
-            self.log_message(f"Dependent order: {order.dependent_order}")
-            self.log_message(f"Dependent order id: {order.dependent_order.identifier}")
-            self.log_message(f"Dependent order customs params: {order.dependent_order.custom_params}")
-            if order.dependent_order.dependent_order:
-                self.log_message(f"dependent-dependent order customs params: {order.dependent_order.dependent_order.custom_params}")
-
+        self.print_order(order)
+        
         if order.order_class is None:
             self.log_message("No registramos nada. Suponemos cancelled")
             return
