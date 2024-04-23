@@ -54,9 +54,15 @@ class TurtleStrategy(MessagingStrategy):
             foverview.set_filter(filters_dict=filters_dict)
             df = foverview.screener_view()
 
-            # TODO: Que pasa si no devuelve ningun símbolo?
-            print(df)
-            symbol_list = df['Ticker'].tolist()
+            # Verificar si el DataFrame está vacío
+            if not df.empty:
+                # Si el DataFrame no está vacío, extraer la lista de tickers
+                symbol_list = df['Ticker'].tolist()
+                self.log_message("Símboloes screener:", symbol_list)
+            else:
+                # Si el DataFrame está vacío, manejar adecuadamente
+                symbol_list = []
+                print("No se encontraron símbolos en el screener.")
         
             # Añadimos los símbolos de las posiciones actuales
             symbol_list = self.get_position_symbols() + symbol_list
@@ -436,7 +442,8 @@ class TurtleStrategy(MessagingStrategy):
             self.position_metadata[key]['cost'] += price * quantity
             self.position_metadata[key]['quantity'] += quantity
             self.position_metadata[key]['last_price'] = price
-            self.add_marker("Buy", symbol="triangle-up", value=price, color="blue", detail_text=detail_text)
+            color = "blue" if system_used == 1 else "white"
+            self.add_marker("Buy", symbol="triangle-up", value=price, color=color, detail_text=detail_text)
         elif order.side == 'sell':
             self.position_metadata[key]['sales_revenue'] += price * quantity
             self.position_metadata[key]['quantity'] -= quantity
@@ -454,7 +461,7 @@ class TurtleStrategy(MessagingStrategy):
         
         #self.log_message(f"Position metadata for {key}:{self.position_metadata[key]}")
 if __name__ == "__main__":
-    is_live = True
+    is_live = False
 
     if is_live:
         from lumibot.brokers import Alpaca
