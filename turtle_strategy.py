@@ -291,14 +291,14 @@ class TurtleStrategy(MessagingStrategy):
                 stop_loss_price = self.calculate_stop_loss(current_price, atr, direction)
                 
             # Llama directamente a open_position con los parámetros necesarios
-        self.open_position(asset, 
-                           direction, 
-                           unit_quantity, 
-                           current_price, 
-                           stop_loss_price, 
-                           None,  # take_profit_price, si decides usarlo
-                           system, 
-                           True)  # Supongo que esto indica si es una operación de breakout o adición de unidades
+        self.open_position(asset_symbol=asset, 
+                           direction=direction, 
+                           quantity=unit_quantity, 
+                           entry_price=current_price, 
+                           stop_loss_price=stop_loss_price, 
+                           take_profit_price=None,  # take_profit_price, si decides usarlo
+                           system_used=system, 
+                           is_breakout=True)  # Supongo que esto indica si es una operación de breakout o adición de unidades
 
     def check_direction_breakout(self, current_price, df, system):
         direction = None
@@ -389,6 +389,7 @@ class TurtleStrategy(MessagingStrategy):
         self.log_message(f"Entrando en {direction} con {quantity} de {asset_symbol}")
         
         # Crear la orden
+        self.log_message(f"stop_loss_price: {stop_loss_price}")
         order = self.create_order(
             asset=Asset(asset_symbol),
             quantity=abs(quantity),
@@ -396,6 +397,7 @@ class TurtleStrategy(MessagingStrategy):
             limit_price=entry_price,
             stop_loss_price=stop_loss_price,
             take_profit_price=take_profit_price,
+            #type="bracket",
             custom_params={'system_used': system_used,
                            'is_breakout': is_breakout}
         )
@@ -430,6 +432,14 @@ class TurtleStrategy(MessagingStrategy):
     # Aquí deberíamos calcular y guardar información de la posición
     # Cantidad ganada, winner/losser,
     def on_filled_order(self, position, order, price, quantity, multiplier):
+        # Si order.order_class es None y order.stop_price tiene un valor entonces
+        # es una orden stop_loss
+        self.log_message(f"Order status: {order.status}" )
+        self.log_message(f"Order class: {order.order_class}")
+        self.log_message(f"Order quantity: {quantity}" )
+        self.log_message(f"Order price: {price}")
+        self.log_message(f"Order stop-loss: {order.stop_price}")
+        self.log_message(f"Dependent order: {order.dependent_order}")
 
         system_used = order.custom_params['system_used']
         key = f"{position.symbol}_{system_used}"
@@ -437,7 +447,7 @@ class TurtleStrategy(MessagingStrategy):
         if key not in self.position_metadata:
             self.position_metadata[key] = {'cost': 0, 'quantity': 0, 'sales_revenue': 0}
         
-        detail_text = f"{quantity}x{price} of {position.symbol}. System: {system_used}"
+        detail_text = f"{quantity}x{price} of {position.symbol}. Order type: {order.type}. System: {system_used}"
         if order.side == 'buy':
             self.position_metadata[key]['cost'] += price * quantity
             self.position_metadata[key]['quantity'] += quantity
@@ -451,14 +461,17 @@ class TurtleStrategy(MessagingStrategy):
                 # Determina si la subposición fue ganadora y realiza acciones adecuadas
                 balance = self.calculate_position_profit_loss(key)
                 
-                color = "green" if balance > 0 else "red"
-                self.add_marker("Closed", symbol="circle", value=price, color=color, detail_text=detail_text + f" Balance: {balance}")
+                #color = "green" if balance > 0 else "red"
+                #self.add_marker("Closed", symbol="circle", value=price, color=color, detail_text=detail_text + f" Balance: {balance}")
                 # Actualiza last_breakout_results con el resultado del último trade
                 self.last_breakout_results[key] = balance > 0
         
                 # Ya que la posición está cerrada, podrías decidir limpiar los datos de posición_metadata para este key
                 del self.position_metadata[key]
-        
+            
+            # Añadimos el símbolo de venta
+            color = "blue" if system_used == 1 else "white"
+            self.add_marker("sell", symbol="triangle-down", color=color, value=price, detail_text=detail_text + f" Balance: {balance}")
         #self.log_message(f"Position metadata for {key}:{self.position_metadata[key]}")
 if __name__ == "__main__":
     is_live = False
