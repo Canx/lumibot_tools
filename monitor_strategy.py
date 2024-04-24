@@ -32,7 +32,7 @@ class MonitorStrategy(MessagingStrategy):
     # y nos posicionamos de la siguiente forma:
     # Repartimos el cash disponible entre el número de assets en los que no tenemos posición.
 
-    def check_entries(self, days=50):
+    def check_entries(self):
         all_symbols = self.get_all_symbols()
         
         # Obtenemos la lista de todas las posiciones y filtramos aquellas con cantidad igual a 0 o que no existen.
@@ -40,9 +40,32 @@ class MonitorStrategy(MessagingStrategy):
         unowned_or_zero_assets = [symbol for symbol in all_symbols if symbol not in current_positions or current_positions[symbol].quantity == 0]
 
         for symbol in unowned_or_zero_assets:
-            self.buy_like_turtletraders(symbol, days)
+            # Comprar cuando encontramos un cruce alcista del precio sobre el SMA200
+            self.buy_when_price_crosses_SMA(symbol, days=200)
+
+            # Comprar cuando encontramos un máximo en las últimas 52 semanas
+            self.buy_when_new_high(symbol, 52*7)
+
+            
+
+    def check_exits(self):
+        for position in self.get_positions():
+            asset = position.asset
+
+            self.log_message("Asset:" + asset.symbol)
+            if asset.asset_type != Asset.AssetType.STOCK:
+                self.log_message("No es stock!")
+                continue
+            
+            #self.sell_when_price_crosses_SMA(position, days=50)
+            #self.sell_when_new_low(position, days=20)
+            self.sell_when_trailing_stop(position, 4)
+
     
-    def buy_like_turtletraders(self, symbol, days=50):
+    ############################
+    #### SEÑALES DE COMPRA #####
+    ############################
+    def buy_when_new_high(self, symbol, days):
         # Obtener los precios históricos para el símbolo dado
         historical_prices = self.get_historical_prices(symbol, length=days)
         prices = historical_prices.df if historical_prices else None
@@ -68,27 +91,75 @@ class MonitorStrategy(MessagingStrategy):
         else:
             self.log_message(f"Unable to retrieve prices or 'close' column missing for {symbol}.")
 
-    def calculate_number_of_eligible_assets(self):
-        # Podría ajustarse para recalcular dinámicamente el número de activos elegibles en diferentes escenarios
-        return len(self.get_all_symbols())  # As an example, adjust based on actual eligibility logic
-    
+    def buy_when_price_crosses_SMA(self, symbol, days=200):
+        # Obtener los precios históricos para el símbolo dado
+        historical_prices = self.get_historical_prices(symbol, length=days+1)  # Añadimos 1 día más para obtener el precio anterior
+        prices_df = historical_prices.df if historical_prices else None
 
-    def check_exits(self):
-        for position in self.get_positions():
-            asset = position.asset
+        if prices_df is not None and 'close' in prices_df.columns:
+            # Calculamos el SMA para los días especificados
+            sma = prices_df['close'].rolling(window=days).mean()
 
-            self.log_message("Asset:" + asset.symbol)
-            if asset.asset_type != Asset.AssetType.STOCK:
-                self.log_message("No es stock!")
-                continue
+            # Obtenemos el último precio de cierre y el precio de cierre del día anterior
+            latest_price = prices_df['close'].iloc[-1]
+            previous_price = prices_df['close'].iloc[-2]
+            latest_sma = sma.iloc[-1]
+            previous_sma = sma.iloc[-2]
 
-            # TODO: Descomentar esta linea para probar como vende con esta estrategia
-            # TODO: Probar diferentes valores de days en backesting (system2 = 20, system1 = 10)
-            self.sell_like_turtletraders(position, days=50)
+            # Comprobamos que el precio anterior esté por debajo del SMA y que el último precio esté por encima del SMA
+            if previous_price < previous_sma and latest_price > latest_sma:
+                self.log_message(f"{symbol}: Price crossed above SMA from below, preparing to buy.")
+                investment_per_asset = self.cash / self.calculate_number_of_eligible_assets()
+                shares_to_buy = int(investment_per_asset / latest_price)
 
+                if shares_to_buy > 0:
+                    order = self.create_order(symbol, shares_to_buy, "buy")
+                    self.submit_order(order)
+                    self.log_message(f"Placed order for {shares_to_buy} shares of {symbol} at price {latest_price}.")
+                else:
+                    self.log_message(f"Not enough cash to buy {symbol}.")
+            else:
+                self.log_message(f"No buy signal for {symbol} as price has not crossed SMA from below.")
+        else:
+            self.log_message(f"Unable to retrieve prices or 'close' column missing for {symbol}.")
+
+    ############################
+    #### SEÑALES DE VENTA  #####
+    ############################
+    def sell_when_price_crosses_SMA(self, position, days=200):
+        symbol = position.symbol
+
+        # Obtener los precios históricos para el símbolo dado
+        historical_prices = self.get_historical_prices(symbol, length=days+1)  # Añadimos 1 día más para obtener el precio anterior
+        prices_df = historical_prices.df if historical_prices else None
+
+        if prices_df is not None and 'close' in prices_df.columns:
+            # Calculamos el SMA para los días especificados
+            sma = prices_df['close'].rolling(window=days).mean()
+
+            # Obtenemos el último precio de cierre y el precio de cierre del día anterior
+            latest_price = prices_df['close'].iloc[-1]
+            previous_price = prices_df['close'].iloc[-2]
+            latest_sma = sma.iloc[-1]
+            previous_sma = sma.iloc[-2]
+
+            # Comprobamos que el precio anterior esté por encima del SMA y que el último precio esté por debajo del SMA
+            if previous_price > previous_sma and latest_price < latest_sma:
+                self.log_message(f"{symbol}: Price crossed below SMA from above, preparing to sell.")
+                # Obtener la posición actual para saber cuántas acciones vender
+                if position and position.quantity > 0:
+                    order = self.create_order(symbol, position.quantity, "sell")
+                    self.submit_order(order)
+                    self.log_message(f"Placed order to sell all {position.quantity} shares of {symbol} at price {latest_price}.")
+                else:
+                    self.log_message(f"No position to sell for {symbol}.")
+            else:
+                self.log_message(f"No sell signal for {symbol} as price has not crossed SMA from above.")
+        else:
+            self.log_message(f"Unable to retrieve prices or 'close' column missing for {symbol}.")
 
     # Usamos la técnica de venta de posición de los Turtle Traders
-    def sell_like_turtletraders(self, position, days=20):
+    def sell_when_new_low(self, position, days):
         self.log_message(f"Comprobando exit para {position.asset} según Turtle Traders")
         prices = self.get_historical_prices(position.asset, length=days).df
             
@@ -109,6 +180,45 @@ class MonitorStrategy(MessagingStrategy):
         else:
             # Mensaje de error si no se encuentra la columna 'close'
             self.log_message(f"Error: No 'close' price available for {position.asset.symbol}")
+
+    def sell_when_trailing_stop(self, position, trail_percent):
+        symbol = position.symbol
+        historical_prices = self.get_historical_prices(symbol, length=2)  # Solo necesitamos los dos últimos precios
+        prices_df = historical_prices.df if historical_prices else None
+
+        if prices_df is not None and 'close' in prices_df.columns:
+            latest_price = prices_df['close'].iloc[-1]
+            previous_price = prices_df['close'].iloc[-2]
+
+            if hasattr(position, 'peak_price'):
+                position.peak_price = max(position.peak_price, previous_price)
+            else:
+                position.peak_price = previous_price  # Inicializar peak_price si no está presente
+
+            stop_price = position.peak_price * (1 - trail_percent / 100)
+
+            if latest_price < stop_price:
+                self.log_message(f"{symbol}: Price {latest_price} has fallen below the trailing stop {stop_price}, preparing to sell.")
+                if position.quantity > 0:
+                    order = self.create_order(symbol, position.quantity, "sell")
+                    self.submit_order(order)
+                    self.log_message(f"Placed order to sell all {position.quantity} shares of {symbol} at price {latest_price}.")
+                    position.peak_price = None  # Resetear peak_price después de la venta
+                else:
+                    self.log_message(f"No position to sell for {symbol}.")
+            else:
+                self.log_message(f"{symbol}: Price is still above the trailing stop. No sell action taken.")
+        else:
+            self.log_message(f"Unable to retrieve prices or 'close' column missing for {symbol}.")
+
+
+    ############################
+    ### FUNCIONES AUXILIARES ###
+    ############################
+    def calculate_number_of_eligible_assets(self):
+        # Podría ajustarse para recalcular dinámicamente el número de activos elegibles en diferentes escenarios
+        return len(self.get_all_symbols())  # As an example, adjust based on actual eligibility logic
+    
     
     # Este método debe comprar de forma equitativa acciones de la lista de assets
     # hasta agotar el cash disponible, siempre comprando acciones enteras.
@@ -154,7 +264,7 @@ class MonitorStrategy(MessagingStrategy):
 
 
     def get_all_symbols(self):
-        return ["SPY", "GOOG", "TSLA", "AMZN"]
+        return ["SPY", "GOOG", "TSLA", "AMZN", "NVDA"]
 
     def get_position_symbols(self):
         if self.is_backtesting:
@@ -191,7 +301,7 @@ if __name__ == "__main__":
         trader.run_all()
     else:
         from config import POLYGON_CONFIG
-        backtesting_start = datetime.datetime(2024, 1, 1)
+        backtesting_start = datetime.datetime(2023, 1, 1)
         backtesting_end = datetime.datetime(2024, 4, 21)
         trading_fee = TradingFee(percent_fee=0.001)
 
@@ -206,4 +316,4 @@ if __name__ == "__main__":
             buy_trading_fees=[trading_fee],
             sell_trading_fees=[trading_fee],
             benchmark_asset="SPY",
-            risk_free_rate=0.532)
+            risk_free_rate=0.0532)
