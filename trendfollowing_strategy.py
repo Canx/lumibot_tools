@@ -4,49 +4,33 @@ from lumibot.backtesting import PolygonDataBacktesting
 from lumibot_tools.messaging import MessagingStrategy, TelegramBotHandler
 from config import ALPACA_CONFIG, TELEGRAM_CONFIG, POLYGON_CONFIG
 import datetime
+import numpy as np
+import pandas as pd
+from scipy.stats import norm
 
 """
-Estrategia que monitorizará los activos que tenemos y
-nos dirá si tenemos que vender o comprar por Telegram
+Estrategia de tipo trend following
 """
-class MonitorStrategy(MessagingStrategy):
+class TrendFollowingStrategy(MessagingStrategy):
 
     def initialize(self):
         self.sleeptime = "1D"
         self.assets = self.get_position_symbols()
 
     def on_trading_iteration(self):
-        if self.first_iteration:
-            # Repartimos el capital para comprar los diferentes símbolos.
-            self.comprar_equitativamente()   
-
-        else:
-            # 1. Verificamos las posibles salidas de cada símbolo.
-            self.check_exits()
-
-            # 2. Verificamos las posibles entradas de cada símbolo.
-            self.check_entries()
-
-    # TODO: Quiero que se busquen los assets en los que no tenemos posición.
-    # Para estos comprobamos la señal de compra, que será entrar si tenemos un máximo de x días
-    # y nos posicionamos de la siguiente forma:
-    # Repartimos el cash disponible entre el número de assets en los que no tenemos posición.
+        self.check_exits()
+        self.check_entries()
 
     def check_entries(self):
         all_symbols = self.get_all_symbols()
         
-        # Obtenemos la lista de todas las posiciones y filtramos aquellas con cantidad igual a 0 o que no existen.
         current_positions = {position.symbol: position for position in self.get_positions()}
         unowned_or_zero_assets = [symbol for symbol in all_symbols if symbol not in current_positions or current_positions[symbol].quantity == 0]
 
         for symbol in unowned_or_zero_assets:
-            # Comprar cuando encontramos un cruce alcista del precio sobre el SMA200
             self.buy_when_price_crosses_SMA(symbol, days=200)
-
-            # Comprar cuando encontramos un máximo en las últimas 52 semanas
             self.buy_when_new_high(symbol, 52*7)
-
-            
+    
 
     def check_exits(self):
         for position in self.get_positions():
@@ -58,8 +42,10 @@ class MonitorStrategy(MessagingStrategy):
                 continue
             
             #self.sell_when_price_crosses_SMA(position, days=50)
-            #self.sell_when_new_low(position, days=20)
-            self.sell_when_trailing_stop(position, 4)
+
+            self.sell_when_trailing_stop_percent(position, 4) # sell when trailing stop arrives at 4%
+            #self.sell_when_trailing_stop_atr(position, 3)
+            #self.sell_when_new_low(position, days=50)
 
     
     ############################
@@ -77,8 +63,7 @@ class MonitorStrategy(MessagingStrategy):
             if latest_price == max_days:
                 self.log_message(f"{symbol} has reached a new {days}-day high at {latest_price}, preparing to buy.")
                 # Calcular la cantidad de acciones a comprar basado en el cash disponible
-                investment_per_asset = self.cash / self.calculate_number_of_eligible_assets()
-                shares_to_buy = int(investment_per_asset / latest_price)
+                shares_to_buy = self.calculate_shares_to_buy(symbol, latest_price)
 
                 if shares_to_buy > 0:
                     order = self.create_order(symbol, shares_to_buy, "buy")
@@ -109,8 +94,7 @@ class MonitorStrategy(MessagingStrategy):
             # Comprobamos que el precio anterior esté por debajo del SMA y que el último precio esté por encima del SMA
             if previous_price < previous_sma and latest_price > latest_sma:
                 self.log_message(f"{symbol}: Price crossed above SMA from below, preparing to buy.")
-                investment_per_asset = self.cash / self.calculate_number_of_eligible_assets()
-                shares_to_buy = int(investment_per_asset / latest_price)
+                shares_to_buy = self.calculate_shares_to_buy(symbol, latest_price)
 
                 if shares_to_buy > 0:
                     order = self.create_order(symbol, shares_to_buy, "buy")
@@ -122,6 +106,60 @@ class MonitorStrategy(MessagingStrategy):
                 self.log_message(f"No buy signal for {symbol} as price has not crossed SMA from below.")
         else:
             self.log_message(f"Unable to retrieve prices or 'close' column missing for {symbol}.")
+
+    ############################
+    #### TAMAÑO DE POSICION ####
+    ############################
+
+    # Función pública
+    def calculate_shares_to_buy(self, symbol, price_per_share):
+        return self.calculate_shares_to_buy_basic(symbol, price_per_share)
+
+    def calculate_shares_to_buy_basic(self, symbol, price_per_share):
+        if price_per_share <= 0:
+            return 0
+        available_cash = self.cash / self.calculate_number_of_eligible_assets()
+        shares_to_buy = int(available_cash / price_per_share)
+        return shares_to_buy
+
+    def calculate_shares_to_buy_var(self, symbol, price_per_share):
+        if price_per_share <= 0:
+            return 0
+        
+        # Calcular el VaR para el símbolo
+        VaR = self.calculate_var(symbol)
+        self.log_message(f"VaR para {symbol}: {VaR}")
+        
+        # Supongamos que no queremos arriesgar más del 2% del capital en una sola operación
+        max_risk_per_trade = 0.02 * self.cash
+        self.log_message("max_risk_per_trade:{max_risk_per_trade}")
+        # Calcular el monto máximo que podemos perder basado en el VaR
+        max_loss = VaR * price_per_share
+        self.log_message(f"max_loss: {max_loss}")
+        
+        # Calcular cuánto capital asignar a esta compra
+        capital_to_use = min(max_loss, max_risk_per_trade)
+        shares_to_buy = int(capital_to_use / price_per_share)
+        
+        return shares_to_buy
+
+    def calculate_var(self, symbol, confidence_level=0.95):
+        # Aquí necesitas obtener los precios históricos para calcular la volatilidad
+        historical_prices = self.get_historical_prices(symbol, length=252)  # Ejemplo: últimos 252 días hábiles (1 año)
+        if historical_prices is None or 'close' not in historical_prices.df.columns:
+            return 0
+        
+        # Calcular los retornos logarítmicos diarios
+        returns = np.log(historical_prices.df['close'] / historical_prices.df['close'].shift(1))
+        # Estimar la volatilidad como la desviación estándar de los retornos
+        sigma = returns.std()
+        # Calcular el VaR diario a un nivel de confianza dado
+        VaR = sigma * norm.ppf(confidence_level)
+        return VaR
+
+    
+
+
 
     ############################
     #### SEÑALES DE VENTA  #####
@@ -181,7 +219,11 @@ class MonitorStrategy(MessagingStrategy):
             # Mensaje de error si no se encuentra la columna 'close'
             self.log_message(f"Error: No 'close' price available for {position.asset.symbol}")
 
-    def sell_when_trailing_stop(self, position, trail_percent):
+    def sell_when_trailing_stop(self, position):
+        #self.sell_when_trailing_stop_percent(position, 4)
+        self.sell_when_trailing_stop_atr(position, 3)
+
+    def sell_when_trailing_stop_percent(self, position, trail_percent):
         symbol = position.symbol
         historical_prices = self.get_historical_prices(symbol, length=2)  # Solo necesitamos los dos últimos precios
         prices_df = historical_prices.df if historical_prices else None
@@ -211,7 +253,40 @@ class MonitorStrategy(MessagingStrategy):
         else:
             self.log_message(f"Unable to retrieve prices or 'close' column missing for {symbol}.")
 
+    def sell_when_trailing_stop_atr(self, position, atr_multiplier=3):
+        symbol = position.symbol
+        atr = self.calculate_atr(symbol)
+        if atr is None:
+            self.log_message(f"Unable to calculate ATR for {symbol}.")
+            return
 
+        historical_prices = self.get_historical_prices(symbol, length=2)  # Solo necesitamos los dos últimos precios
+        prices_df = historical_prices.df if historical_prices else None
+
+        if prices_df is not None and 'close' in prices_df.columns:
+            latest_price = prices_df['close'].iloc[-1]
+            previous_price = prices_df['close'].iloc[-2]
+
+            if hasattr(position, 'peak_price'):
+                position.peak_price = max(position.peak_price, previous_price)
+            else:
+                position.peak_price = previous_price  # Inicializar peak_price si no está presente
+
+            stop_price = position.peak_price - atr * atr_multiplier
+
+            if latest_price < stop_price:
+                self.log_message(f"{symbol}: Price {latest_price} has fallen below the trailing stop {stop_price}, preparing to sell.")
+                if position.quantity > 0:
+                    order = self.create_order(symbol, position.quantity, "sell")
+                    self.submit_order(order)
+                    self.log_message(f"Placed order to sell all {position.quantity} shares of {symbol} at price {latest_price}.")
+                    position.peak_price = None  # Resetear peak_price después de la venta
+                else:
+                    self.log_message(f"No position to sell for {symbol}.")
+            else:
+                self.log_message(f"{symbol}: Price is still above the trailing stop. No sell action taken.")
+        else:
+            self.log_message(f"Unable to retrieve prices or 'close' column missing for {symbol}.")
     ############################
     ### FUNCIONES AUXILIARES ###
     ############################
@@ -219,7 +294,27 @@ class MonitorStrategy(MessagingStrategy):
         # Podría ajustarse para recalcular dinámicamente el número de activos elegibles en diferentes escenarios
         return len(self.get_all_symbols())  # As an example, adjust based on actual eligibility logic
     
+    def calculate_atr(self, symbol, period=14):
+        historical_prices = self.get_historical_prices(symbol, length=period + 1)
+        if historical_prices is None or 'high' not in historical_prices.df.columns or 'low' not in historical_prices.df.columns or 'close' not in historical_prices.df.columns:
+            return None
+
+        # Asegúrate de que los cálculos se realizan sobre un DataFrame de pandas
+        df = historical_prices.df
+        high_low = df['high'] - df['low']
+        high_close = np.abs(df['high'] - df['close'].shift())
+        low_close = np.abs(df['low'] - df['close'].shift())
+        
+        # Combine all three into a DataFrame and take the max
+        tr = pd.DataFrame({'high_low': high_low, 'high_close': high_close, 'low_close': low_close}).max(axis=1)
+
+        # Calcula el ATR usando rolling y mean sobre la serie pandas
+        atr = tr.rolling(window=period).mean().iloc[-1]
+        return atr
     
+    ####################################
+    #### FUNCIONES DE COMPRA INICIAL ###
+    ####################################
     # Este método debe comprar de forma equitativa acciones de la lista de assets
     # hasta agotar el cash disponible, siempre comprando acciones enteras.
     def comprar_equitativamente(self):
@@ -262,9 +357,13 @@ class MonitorStrategy(MessagingStrategy):
                 order = self.create_order(asset, quantity, "buy")
                 self.submit_order(order)
 
+    # Esta función intenta ajustar las compras iniciales según la volatilidad de los activos.
+    def comprar_segun_volatilidad(self):
+        pass
+
 
     def get_all_symbols(self):
-        return ["SPY", "GOOG", "TSLA", "AMZN", "NVDA"]
+        return ["GOOG", "TSLA", "AMZN", "NVDA", "AAPL", "MSFT", "META"]
 
     def get_position_symbols(self):
         if self.is_backtesting:
@@ -290,7 +389,7 @@ if __name__ == "__main__":
         from config import ALPACA_CONFIG, TELEGRAM_CONFIG
         trader = Trader()
         broker = Alpaca(ALPACA_CONFIG)
-        strategy = MonitorStrategy(broker)
+        strategy = TrendFollowingStrategy(broker)
 
         # Set telegram bot and attach to strategy
         bot = TelegramBotHandler(TELEGRAM_CONFIG)
@@ -302,12 +401,12 @@ if __name__ == "__main__":
     else:
         from config import POLYGON_CONFIG
         backtesting_start = datetime.datetime(2023, 1, 1)
-        backtesting_end = datetime.datetime(2024, 4, 21)
+        backtesting_end = datetime.datetime(2023, 12, 31)
         trading_fee = TradingFee(percent_fee=0.001)
 
         trader = Trader(backtest=True)
         trading_fee = TradingFee(percent_fee=0.001)
-        MonitorStrategy.backtest(
+        TrendFollowingStrategy.backtest(
             PolygonDataBacktesting,
             backtesting_start,
             backtesting_end,
