@@ -15,14 +15,19 @@ class TrendFollowingStrategy(MessagingStrategy):
 
     def initialize(self):
         self.sleeptime = "1D"
-        self.assets = self.get_start_symbols()
+        self.max_assets = 10
+        self.assets = self.get_start_assets()
 
-    def get_backtesting_symbols(self):
+    def get_backtesting_assets(self):
         #return ["GOOG", "TSLA", "AMZN", "NVDA", "AAPL", "MSFT", "META", "AMD", "WMT", "PEP", "LLY"]
         #return ["AMD", "WMT", "PEP", "LLY"]
         #return ["TSLA", "NVDA", "GOOG", "AMZN", "AAPL", "MSFT", "META"]
         return ["META"]
     
+    # TODO: Use this method for filtering and getting new potential assets to enter.
+    def after_market_closes(self):
+        self.update_assets()
+
     def on_trading_iteration(self):
         entry_signal = lambda symbol: (
             self.signal_when_price_crossup_SMA(symbol, 200) or
@@ -39,8 +44,7 @@ class TrendFollowingStrategy(MessagingStrategy):
 
     
     def check_entries(self, signal_function):
-        all_symbols = self.get_all_symbols()
-        for symbol in all_symbols:
+        for symbol in self.assets:
             if signal_function(symbol):
                 latest_price = self.get_last_price(symbol)
                 shares_to_buy = self.calculate_shares_to_buy(symbol, latest_price)
@@ -316,7 +320,7 @@ class TrendFollowingStrategy(MessagingStrategy):
     ############################
     def calculate_number_of_eligible_assets(self):
         # Podría ajustarse para recalcular dinámicamente el número de activos elegibles en diferentes escenarios
-        return len(self.get_all_symbols())  # As an example, adjust based on actual eligibility logic
+        return len(self.assets)  # As an example, adjust based on actual eligibility logic
     
     def calculate_atr(self, symbol, period=14):
         historical_prices = self.get_historical_prices(symbol, length=period + 1)
@@ -385,29 +389,89 @@ class TrendFollowingStrategy(MessagingStrategy):
     def comprar_segun_volatilidad(self):
         pass
 
-    def get_all_symbols(self):
-        return self.assets
-    
+    ##########################
+    ### ASSET MANAGEMENT  ####
+    ##########################
+    def update_assets(self):
+        if not(self.is_backtesting):
+            # Check if any position done outside bot
+            position_assets = self.get_position_assets()
+            for asset in position_assets:
+                if asset not in self.assets:
+                    self.assets.append(asset)
 
-    def get_start_symbols(self):
+            # Add new assets from screener
+            new_assets = self.get_assets_from_screener()
+            for asset in new_assets:
+                if asset not in self.assets:
+                    self.assets.append(asset)
+
+            # Filter best assets (max_assets)
+            self.assets = self.filter_best_assets(self.assets)
+
+    def get_assets_from_screener(self):
+        from finvizfinance.screener.overview import Overview
+
+        foverview = Overview()
+        filters_dict = {
+            'Current Volume': 'Over 1M',
+            'Beta': 'Over 1',
+            'Performance': 'Month +10%',
+            'Performance 2': 'Year +30%',
+            'RSI (14)': 'Not Overbought (<60)',
+            #'200-Day Simple Moving Average': 'Price bellow SMA200',
+            '50-Day Simple Moving Average': 'Price above SMA50',
+            'Gap': 'Up'
+        }
+        foverview.set_filter(filters_dict=filters_dict)
+        df = foverview.screener_view()
+
+        # Verificar si el DataFrame está vacío
+        if not df.empty:
+            # Si el DataFrame no está vacío, extraer la lista de tickers
+            symbol_list = df['Ticker'].tolist()
+            self.log_message(f"Símbolos detectados por el screener: {symbol_list}")
+        else:
+            # Si el DataFrame está vacío, manejar adecuadamente
+            symbol_list = []
+            print("No se encontraron símbolos en el screener.")
+        
+        # Añadimos los símbolos de las posiciones actuales
+
+        # Quitamos duplicados manteniendo el orden
+        symbol_list = list(dict.fromkeys(symbol_list))
+        
+        return symbol_list
+
+    # TODO: Filter the best max_assets
+    def filter_best_assets(self, assets):
+        # TODO: En base al número máximo de símbolos (self.max_assets)
+        # este método debe ordenar los mejores max_assets de mejores y peores 
+        # y quitar de la lista los assets sobrantes
+        return assets
+
+    def get_start_assets(self):
         if self.is_backtesting:
-            return self.get_backtesting_symbols()
+            return self.get_backtesting_assets()
         
         else:
-            # Obtenemos la lista de posiciones
-            positions = self.get_positions()
-            for position in positions:
-                self.log_message(position)
-                self.log_message(position.orders)
+            return self.get_position_assets()
+        
+    def get_position_assets(self):
+        # Obtenemos la lista de posiciones
+        positions = self.get_positions()
+        for position in positions:
+            self.log_message(position)
+            self.log_message(position.orders)
             
-            # Usamos una comprensión de lista para extraer los símbolos
-            symbols = [position.symbol for position in positions]
+        # Usamos una comprensión de lista para extraer los símbolos
+        assets = [position.symbol for position in positions]
             
-            return symbols
+        return assets
     
 
 if __name__ == "__main__":
-    is_live = True
+    is_live = False
 
     if is_live:
         from lumibot.brokers import Alpaca
