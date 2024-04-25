@@ -19,9 +19,11 @@ class TelegramBotHandler(MessageBaseHandler):
     async def handle_incoming_message(self, message: Message):
         text = message.text
         if text.startswith('/'):
-            command = text.split()[0]
+            parts = text.split()
+            command = parts[0]
+            parameters = ' '.join(parts[1:])  # Junta los parámetros restantes en una sola cadena
             if self.receive_message_queue:
-                self.receive_message_queue.put(("message_command", {"command": command, "chat_id": message.chat.id}))
+                self.receive_message_queue.put(("message_command", {"command": command, "parameters": parameters, "chat_id": message.chat.id}))
 
     async def start(self):
         asyncio.create_task(self.process_send_message_queue())
