@@ -21,8 +21,11 @@ class MessagingStrategy(Strategy):
 
     # Sends a message using the messaging bot. Logs an error if the bot is not configured.
     def send_message(self, text):
+        if self.is_backtesting:
+            return
         if isinstance(text, str):
-            self.messaging_bot.send_message(text)
+            if self.messaging_bot is not None:
+                self.messaging_bot.send_message(text)
         
     def log_message(self, message, color=None, broadcast=False):
         super().log_message(message, color, broadcast)  # Llama al método original para asegurar que el log se registre
@@ -134,4 +137,4 @@ class MessagingStrategy(Strategy):
                 Account Value = ${portfolio_value:,.0f}
                 """        
         
-        self.send_message(message)
+        self.log_message(message)
