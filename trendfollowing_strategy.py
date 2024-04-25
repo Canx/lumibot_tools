@@ -9,13 +9,13 @@ import pandas as pd
 from scipy.stats import norm
 
 """
-Estrategia de tipo trend following
+Estrategia de tipo trend following con fines educativos
 """
 class TrendFollowingStrategy(MessagingStrategy):
 
     def initialize(self):
         self.sleeptime = "1D"
-        self.assets = self.get_position_symbols()
+        self.assets = self.get_start_symbols()
 
     def on_trading_iteration(self):
         self.check_exits()
@@ -48,9 +48,11 @@ class TrendFollowingStrategy(MessagingStrategy):
             #self.sell_when_new_low(position, days=50)
 
     
-    ############################
-    #### SEÑALES DE COMPRA #####
-    ############################
+    #######################
+    #### BUY SIGNALS  #####
+    #######################
+
+    # TODO: Separar la compra de la señal
     def buy_when_new_high(self, symbol, days):
         # Obtener los precios históricos para el símbolo dado
         historical_prices = self.get_historical_prices(symbol, length=days)
@@ -107,9 +109,9 @@ class TrendFollowingStrategy(MessagingStrategy):
         else:
             self.log_message(f"Unable to retrieve prices or 'close' column missing for {symbol}.")
 
-    ############################
-    #### TAMAÑO DE POSICION ####
-    ############################
+    ##########################
+    #### POSITION SIZING  ####
+    ##########################
 
     # Función pública
     def calculate_shares_to_buy(self, symbol, price_per_share):
@@ -158,12 +160,10 @@ class TrendFollowingStrategy(MessagingStrategy):
         return VaR
 
     
-
-
-
-    ############################
-    #### SEÑALES DE VENTA  #####
-    ############################
+    #######################
+    #### SELL SIGNALS #####
+    #######################
+    # TODO: Separar señales de venta de la venta
     def sell_when_price_crosses_SMA(self, position, days=200):
         symbol = position.symbol
 
@@ -361,13 +361,20 @@ class TrendFollowingStrategy(MessagingStrategy):
     def comprar_segun_volatilidad(self):
         pass
 
-
     def get_all_symbols(self):
-        return ["GOOG", "TSLA", "AMZN", "NVDA", "AAPL", "MSFT", "META"]
+        return self.assets
+    
+    def get_backtesting_symbols(self):
+        return ["GOOG", "TSLA", "AMZN", "NVDA", "AAPL", "MSFT", "META", "AMD", "WMT", "PEP", "LLY"]
+        #return ["AMD", "WMT", "PEP", "LLY"]
+        #return ["GOOG", "TSLA", "AMZN", "NVDA", "AAPL", "MSFT", "META"]
 
-    def get_position_symbols(self):
+    # TODO: Crear funciones para añadir/quitar símbolos desde telegram
+
+
+    def get_start_symbols(self):
         if self.is_backtesting:
-            return self.get_all_symbols()
+            return self.get_backtesting_symbols()
         
         # Obtenemos la lista de posiciones
         positions = self.get_positions()
