@@ -389,9 +389,6 @@ class TrendFollowingStrategy(MessagingStrategy):
         return self.assets
     
 
-    # TODO: Crear funciones para añadir/quitar símbolos desde telegram
-
-
     def get_start_symbols(self):
         if self.is_backtesting:
             return self.get_backtesting_symbols()
