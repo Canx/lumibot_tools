@@ -443,12 +443,32 @@ class TrendFollowingStrategy(MessagingStrategy):
         
         return symbol_list
 
-    # TODO: Filter the best max_assets
+    # Filter the best max_assets based on momentum ratio
     def filter_best_assets(self, assets):
-        # TODO: En base al número máximo de símbolos (self.max_assets)
-        # este método debe ordenar los mejores max_assets de mejores y peores 
-        # y quitar de la lista los assets sobrantes
-        return assets
+        asset_scores = []
+
+        for asset in assets:
+            # Obtener datos históricos
+            data = self.get_historical_prices(asset, length=201)  # Asumiendo que esta función devuelve un DataFrame
+
+            # Calcular SMA de 50 días y SMA de 200 días
+            data['SMA50'] = data['close'].rolling(window=50).mean()
+            data['SMA200'] = data['close'].rolling(window=200).mean()
+
+            # Evaluar la condición de cruce para determinar la puntuación
+            latest_sma50 = data['SMA50'].iloc[-1]
+            latest_sma200 = data['SMA200'].iloc[-1]
+            score = latest_sma50 / latest_sma200  # Un ratio simple para la puntuación
+
+            asset_scores.append((asset, score))
+
+        # Ordenar todos los activos por su puntuación, los más altos primero
+        sorted_assets = sorted(asset_scores, key=lambda x: x[1], reverse=True)
+
+        # Si deseas asegurarte de tener al menos `self.max_assets`, se seleccionan aquí
+        best_assets = [asset[0] for asset in sorted_assets[:max(len(sorted_assets), self.max_assets)]]
+
+        return best_assets
 
     def get_start_assets(self):
         if self.is_backtesting:
