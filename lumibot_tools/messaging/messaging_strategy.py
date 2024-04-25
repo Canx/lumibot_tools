@@ -31,6 +31,15 @@ class MessagingStrategy(Strategy):
         
         return message
     
+    def help_command(self, parameters=None):
+        # Filtrar todos los métodos que terminan en '_command'
+        commands = [method for method in dir(self) if method.endswith('_command') and callable(getattr(self, method))]
+        # Remover el sufijo '_command' y formatear para el mensaje de ayuda
+        command_list = [command[:-8] for command in commands]
+        # Crear un mensaje de ayuda
+        help_message = "Available commands: " + ", ".join(command_list)
+        return help_message
+    
     # Retrieves and formats the current positions, including their value and percent of the portfolio.
     def positions_command(self, parameters=None):
         positions = self.get_positions()
