@@ -456,7 +456,7 @@ class TrendFollowingStrategy(MessagingStrategy):
         df = foverview.screener_view()
 
         # Verificar si el DataFrame está vacío
-        if df and not df.empty:
+        if df is not None and not df.empty:
             # Si el DataFrame no está vacío, extraer la lista de tickers
             symbol_list = df['Ticker'].tolist()
             self.log_message(f"Símbolos detectados por el screener: {symbol_list}")
