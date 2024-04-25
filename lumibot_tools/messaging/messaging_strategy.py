@@ -23,7 +23,15 @@ class MessagingStrategy(Strategy):
     def send_message(self, text):
         if self.messaging_bot:
             self.messaging_bot.send_message(text)
+
+    def log_message(self, message, color=None, broadcast=False):
+        super().log_message(message, color, broadcast)  # Llama al método original para asegurar que el log se registre
         
+        # Verifica si el modo de backtesting está desactivado
+        if not self.is_backtesting:
+            # Envia el mensaje al bot de mensajería
+            self.send_message(message)        
+
     # Returns the current portfolio value as a message.
     def status_command(self, parameters=None):
         portfolio_value = self.get_portfolio_value()
