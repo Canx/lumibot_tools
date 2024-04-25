@@ -17,69 +17,209 @@ class TrendFollowingStrategy(MessagingStrategy):
         self.sleeptime = "1D"
         self.assets = self.get_start_symbols()
 
+    def get_backtesting_symbols(self):
+        #return ["GOOG", "TSLA", "AMZN", "NVDA", "AAPL", "MSFT", "META", "AMD", "WMT", "PEP", "LLY"]
+        #return ["AMD", "WMT", "PEP", "LLY"]
+        #return ["TSLA", "NVDA", "GOOG", "AMZN", "AAPL", "MSFT", "META"]
+        return ["META"]
+    
     def on_trading_iteration(self):
-        self.check_exits()
-        self.check_entries()
+        entry_signal = lambda symbol: (
+            self.signal_when_price_crossup_SMA(symbol, 200) or
+            self.signal_when_new_high(symbol, 52*7)
+        )
 
-    def check_entries(self):
+        exit_signal = lambda position: (
+           #self.signal_sell_when_trailing_stop_atr(position, atr_multiplier=5)
+           self.signal_when_trailing_stop_percent(position, 4)
+        )
+
+        self.check_exits(exit_signal)
+        self.check_entries(entry_signal)
+
+    
+    def check_entries(self, signal_function):
         all_symbols = self.get_all_symbols()
-        
-        current_positions = {position.symbol: position for position in self.get_positions()}
-        unowned_or_zero_assets = [symbol for symbol in all_symbols if symbol not in current_positions or current_positions[symbol].quantity == 0]
-
-        for symbol in unowned_or_zero_assets:
-            self.buy_when_price_crosses_SMA(symbol, days=200)
-            self.buy_when_new_high(symbol, 52*7)
-    
-
-    def check_exits(self):
-        for position in self.get_positions():
-            asset = position.asset
-
-            self.log_message("Asset:" + asset.symbol)
-            if asset.asset_type != Asset.AssetType.STOCK:
-                self.log_message("No es stock!")
-                continue
-            
-            #self.sell_when_price_crosses_SMA(position, days=50)
-
-            self.sell_when_trailing_stop_percent(position, 4) # sell when trailing stop arrives at 4%
-            #self.sell_when_trailing_stop_atr(position, 3)
-            #self.sell_when_new_low(position, days=50)
-
-    
-    #######################
-    #### BUY SIGNALS  #####
-    #######################
-
-    # TODO: Separar la compra de la señal
-    def buy_when_new_high(self, symbol, days):
-        # Obtener los precios históricos para el símbolo dado
-        historical_prices = self.get_historical_prices(symbol, length=days)
-        prices = historical_prices.df if historical_prices else None
-
-        if prices is not None and 'close' in prices.columns:
-            # Comprobar si el último precio es un máximo en los últimos 'days' días
-            latest_price = prices['close'].iloc[-1]
-            max_days = prices['close'].tail(days).max()
-            if latest_price == max_days:
-                self.log_message(f"{symbol} has reached a new {days}-day high at {latest_price}, preparing to buy.")
-                # Calcular la cantidad de acciones a comprar basado en el cash disponible
+        for symbol in all_symbols:
+            if signal_function(symbol):
+                latest_price = self.get_last_price(symbol)
                 shares_to_buy = self.calculate_shares_to_buy(symbol, latest_price)
-
                 if shares_to_buy > 0:
                     order = self.create_order(symbol, shares_to_buy, "buy")
                     self.submit_order(order)
                     self.log_message(f"Placed order for {shares_to_buy} shares of {symbol} at price {latest_price}.")
                 else:
                     self.log_message(f"Not enough cash to buy {symbol}.")
+
+    def check_exits(self, signal_function):
+        for position in self.get_positions():
+            if position.asset.asset_type != Asset.AssetType.STOCK:
+                self.log_message("It's not a stock!")
+                continue
+
+            if signal_function(position):
+                self.log_message(f"Exiting position for {position.symbol}")
+                if position.quantity > 0:
+                    order = self.create_order(position.symbol, position.quantity, "sell")
+                    self.submit_order(order)
+                    self.log_message(f"Placed order to sell all {position.quantity} shares of {position.symbol}.")
+                    if hasattr(position, 'peak_price'):
+                        position.peak_price = None  # Resetear peak_price después de la venta
+                else:
+                    self.log_message(f"Attempted to place an order with negative quantity for {position.symbol}.")
+
+
+    ########################
+    ### CHATBOT COMMANDS ###
+    ########################
+    def add_symbol_command(self, symbol=None):
+        if symbol is None:
+            return "No symbol provided."
+
+        # Intenta obtener el último precio para verificar si el símbolo existe en el broker
+        last_price = self.get_last_price(symbol)
+        if last_price is None:
+            return f"Symbol {symbol} does not exist in the broker or an error occurred retrieving the price."
+
+        if symbol not in self.assets:
+            self.assets.append(symbol)
+            return f"Symbol {symbol} added successfully."
+        else:
+            return f"Symbol {symbol} already exists in the list."
+
+
+    def remove_symbol_command(self, symbol=None):
+        if symbol is None:
+            return "No symbol provided."
+
+        # Verifica si el símbolo existe en la lista
+        if symbol in self.assets:
+            self.assets.remove(symbol)
+            return f"Symbol {symbol} removed successfully."
+        else:
+            return f"Symbol {symbol} does not exist in the list."
+
+
+    def list_symbols_command(self, parameters=None):
+        return ', '.join(self.assets)
+
+    #######################
+    #### ENTRY SIGNALS ####
+    #######################
+
+    def signal_when_new_high(self, symbol, days):
+        historical_prices = self.get_historical_prices(symbol, length=days)
+        prices = historical_prices.df if historical_prices else None
+
+        if prices is not None and 'close' in prices.columns:
+            latest_price = prices['close'].iloc[-1]
+            max_days = prices['close'].tail(days).max()
+            if latest_price == max_days:
+                self.log_message(f"{symbol} has reached a new {days}-day high at {latest_price}")
+                return True
+        return False
+    
+    def signal_when_price_crossup_SMA(self, symbol, days=200):
+        historical_prices = self.get_historical_prices(symbol, length=days+1)
+        prices_df = historical_prices.df if historical_prices else None
+
+        if prices_df is not None and 'close' in prices_df.columns:
+            sma = prices_df['close'].rolling(window=days).mean()
+            latest_price = prices_df['close'].iloc[-1]
+            previous_price = prices_df['close'].iloc[-2]
+            latest_sma = sma.iloc[-1]
+            previous_sma = sma.iloc[-2]
+
+            if previous_price < previous_sma and latest_price > latest_sma:
+                self.log_message(f"{symbol}: Price crossed above SMA from below.")
+                return True
+        return False
+
+    def signal_when_price_crossup_EMA(self, symbol, days=200):
+        historical_prices = self.get_historical_prices(symbol, length=days+1)
+        prices_df = historical_prices.df if historical_prices else None
+
+        if prices_df is not None and 'close' in prices_df.columns:
+            # Calculamos la EMA en lugar de la SMA
+            ema = prices_df['close'].ewm(span=days, adjust=False).mean()
+            latest_price = prices_df['close'].iloc[-1]
+            previous_price = prices_df['close'].iloc[-2]
+            latest_ema = ema.iloc[-1]
+            previous_ema = ema.iloc[-2]
+
+            # Verificar el cruce del precio sobre la EMA
+            if previous_price < previous_ema and latest_price > latest_ema:
+                self.log_message(f"{symbol}: Price crossed above EMA from below.")
+                return True
+        else:
+            if prices_df is None:
+                self.log_message(f"No historical prices data found for {symbol}.")
+            elif 'close' not in prices_df.columns:
+                self.log_message(f"'Close' column missing for {symbol}.")
+        return False
+
+    #######################
+    #### EXIT SIGNALS #####
+    #######################
+    def signal_sell_when_trailing_stop_atr(self, position, atr_multiplier=3):
+        symbol = position.symbol
+        atr = self.calculate_atr(symbol, 14)
+        if atr is None:
+            self.log_message(f"Unable to calculate ATR for {symbol}.")
+            return False
+        else:
+            self.log_message(f"ATR for {symbol} calculated: {atr}")
+
+        historical_prices = self.get_historical_prices(symbol, length=2)  # Solo necesitamos los dos últimos precios
+        prices_df = historical_prices.df if historical_prices else None
+
+        if prices_df is not None and 'close' in prices_df.columns:
+            latest_price = prices_df['close'].iloc[-1]
+            previous_price = prices_df['close'].iloc[-2]
+
+            if hasattr(position, 'peak_price'):
+                self.log_message(f"Current peak price for {symbol}: {position.peak_price}. New candidate price: {previous_price}")
+                position.peak_price = max(position.peak_price, previous_price)
             else:
-                self.log_message(f"No buy signal for {symbol} as price {latest_price} is not the {days}-day high.")
+                self.log_message(f"Initializing peak price for {symbol} with price: {previous_price}")
+                position.peak_price = previous_price
+            
+            stop_price = position.peak_price - atr * atr_multiplier
+            self.log_message(f"Calculated trailing stop for {symbol}: {stop_price} (Peak price: {position.peak_price}, ATR: {atr}, Multiplier: {atr_multiplier})")
+
+            if latest_price < stop_price:
+                self.log_message(f"{symbol}: Price {latest_price} has fallen below the trailing stop {stop_price}.")
+                return True
+            else:
+                self.log_message(f"{symbol}: Price {latest_price} is still above the trailing stop {stop_price}. No sell action taken.")
+        
         else:
             self.log_message(f"Unable to retrieve prices or 'close' column missing for {symbol}.")
+            return False
+    
+    def signal_when_trailing_stop_percent(self, position, trail_percent):
+        symbol = position.symbol
+        historical_prices = self.get_historical_prices(symbol, length=2)  # Solo necesitamos los dos últimos precios
+        prices_df = historical_prices.df if historical_prices else None
 
-    def buy_when_price_crosses_SMA(self, symbol, days=200):
-        # Obtener los precios históricos para el símbolo dado
+        if prices_df is not None and 'close' in prices_df.columns:
+            latest_price = prices_df['close'].iloc[-1]
+            previous_price = prices_df['close'].iloc[-2]
+
+            if hasattr(position, 'peak_price'):
+                position.peak_price = max(position.peak_price, previous_price)
+            else:
+                position.peak_price = previous_price  # Inicializar peak_price si no está presente
+
+            stop_price = position.peak_price * (1 - trail_percent / 100)
+
+            if latest_price < stop_price:
+                self.log_message(f"{symbol}: Price {latest_price} has fallen below the trailing stop {stop_price}.")
+                return True
+        return False
+
+    def signal_when_price_crosses_down_SMA(self, position, days=200):
+        symbol = position.symbol
         historical_prices = self.get_historical_prices(symbol, length=days+1)  # Añadimos 1 día más para obtener el precio anterior
         prices_df = historical_prices.df if historical_prices else None
 
@@ -93,27 +233,38 @@ class TrendFollowingStrategy(MessagingStrategy):
             latest_sma = sma.iloc[-1]
             previous_sma = sma.iloc[-2]
 
-            # Comprobamos que el precio anterior esté por debajo del SMA y que el último precio esté por encima del SMA
-            if previous_price < previous_sma and latest_price > latest_sma:
-                self.log_message(f"{symbol}: Price crossed above SMA from below, preparing to buy.")
-                shares_to_buy = self.calculate_shares_to_buy(symbol, latest_price)
+            # Comprobamos que el precio anterior esté por encima del SMA y que el último precio esté por debajo del SMA
+            if previous_price > previous_sma and latest_price < latest_sma:
+                self.log_message(f"{symbol}: Price crossed below SMA from above.")
+                return True
+        return False
 
-                if shares_to_buy > 0:
-                    order = self.create_order(symbol, shares_to_buy, "buy")
-                    self.submit_order(order)
-                    self.log_message(f"Placed order for {shares_to_buy} shares of {symbol} at price {latest_price}.")
-                else:
-                    self.log_message(f"Not enough cash to buy {symbol}.")
+    def signal_sell_when_new_low(self, position, days):
+        self.log_message(f"Comprobando exit para {position.asset} según Turtle Traders")
+        historical_prices = self.get_historical_prices(position.asset, length=days)
+        prices = historical_prices.df if historical_prices else None
+
+        if prices is not None and 'close' in prices.columns:
+            # Calcular el mínimo de los últimos 'days' días
+            min_days = prices['close'].tail(days).min()
+
+            # Comprobar si el último precio es el mínimo de los últimos 'days' días
+            latest_price = prices['close'].iloc[-1]
+            if latest_price == min_days:
+                self.log_message(f"{position.asset.symbol} has reached a new {days}-day low at {latest_price}.")
+                return True
             else:
-                self.log_message(f"No buy signal for {symbol} as price has not crossed SMA from below.")
+                self.log_message(f"No sell condition met for {position.asset.symbol}")
         else:
-            self.log_message(f"Unable to retrieve prices or 'close' column missing for {symbol}.")
+            # Mensaje de error si no se encuentra la columna 'close'
+            self.log_message(f"Error: No 'close' price available for {position.asset.symbol}")
 
+        return False
+
+    
     ##########################
     #### POSITION SIZING  ####
     ##########################
-
-    # Función pública
     def calculate_shares_to_buy(self, symbol, price_per_share):
         return self.calculate_shares_to_buy_basic(symbol, price_per_share)
 
@@ -160,133 +311,6 @@ class TrendFollowingStrategy(MessagingStrategy):
         return VaR
 
     
-    #######################
-    #### SELL SIGNALS #####
-    #######################
-    # TODO: Separar señales de venta de la venta
-    def sell_when_price_crosses_SMA(self, position, days=200):
-        symbol = position.symbol
-
-        # Obtener los precios históricos para el símbolo dado
-        historical_prices = self.get_historical_prices(symbol, length=days+1)  # Añadimos 1 día más para obtener el precio anterior
-        prices_df = historical_prices.df if historical_prices else None
-
-        if prices_df is not None and 'close' in prices_df.columns:
-            # Calculamos el SMA para los días especificados
-            sma = prices_df['close'].rolling(window=days).mean()
-
-            # Obtenemos el último precio de cierre y el precio de cierre del día anterior
-            latest_price = prices_df['close'].iloc[-1]
-            previous_price = prices_df['close'].iloc[-2]
-            latest_sma = sma.iloc[-1]
-            previous_sma = sma.iloc[-2]
-
-            # Comprobamos que el precio anterior esté por encima del SMA y que el último precio esté por debajo del SMA
-            if previous_price > previous_sma and latest_price < latest_sma:
-                self.log_message(f"{symbol}: Price crossed below SMA from above, preparing to sell.")
-                # Obtener la posición actual para saber cuántas acciones vender
-                if position and position.quantity > 0:
-                    order = self.create_order(symbol, position.quantity, "sell")
-                    self.submit_order(order)
-                    self.log_message(f"Placed order to sell all {position.quantity} shares of {symbol} at price {latest_price}.")
-                else:
-                    self.log_message(f"No position to sell for {symbol}.")
-            else:
-                self.log_message(f"No sell signal for {symbol} as price has not crossed SMA from above.")
-        else:
-            self.log_message(f"Unable to retrieve prices or 'close' column missing for {symbol}.")
-
-    # Usamos la técnica de venta de posición de los Turtle Traders
-    def sell_when_new_low(self, position, days):
-        self.log_message(f"Comprobando exit para {position.asset} según Turtle Traders")
-        prices = self.get_historical_prices(position.asset, length=days).df
-            
-        if 'close' in prices.columns:
-            # Calcular el mínimo de los últimos 'days' días
-            min_days = prices['close'].tail(days).min()
-
-            # Comprobar si el último precio es el mínimo de los últimos 'days' días
-            latest_price = prices['close'].iloc[-1]
-            if latest_price == min_days:
-                self.log_message(f"{position.asset.symbol} has reached a new {days}-day low at {latest_price}, selling entire position.")
-                # Crear y enviar una orden de mercado para vender toda la posición
-                order = position.get_selling_order()
-                self.submit_order(order)
-            else:
-                self.log_message(f"No sell condition met for {position.asset.symbol}")
-
-        else:
-            # Mensaje de error si no se encuentra la columna 'close'
-            self.log_message(f"Error: No 'close' price available for {position.asset.symbol}")
-
-    def sell_when_trailing_stop(self, position):
-        #self.sell_when_trailing_stop_percent(position, 4)
-        self.sell_when_trailing_stop_atr(position, 3)
-
-    def sell_when_trailing_stop_percent(self, position, trail_percent):
-        symbol = position.symbol
-        historical_prices = self.get_historical_prices(symbol, length=2)  # Solo necesitamos los dos últimos precios
-        prices_df = historical_prices.df if historical_prices else None
-
-        if prices_df is not None and 'close' in prices_df.columns:
-            latest_price = prices_df['close'].iloc[-1]
-            previous_price = prices_df['close'].iloc[-2]
-
-            if hasattr(position, 'peak_price'):
-                position.peak_price = max(position.peak_price, previous_price)
-            else:
-                position.peak_price = previous_price  # Inicializar peak_price si no está presente
-
-            stop_price = position.peak_price * (1 - trail_percent / 100)
-
-            if latest_price < stop_price:
-                self.log_message(f"{symbol}: Price {latest_price} has fallen below the trailing stop {stop_price}, preparing to sell.")
-                if position.quantity > 0:
-                    order = self.create_order(symbol, position.quantity, "sell")
-                    self.submit_order(order)
-                    self.log_message(f"Placed order to sell all {position.quantity} shares of {symbol} at price {latest_price}.")
-                    position.peak_price = None  # Resetear peak_price después de la venta
-                else:
-                    self.log_message(f"No position to sell for {symbol}.")
-            else:
-                self.log_message(f"{symbol}: Price is still above the trailing stop. No sell action taken.")
-        else:
-            self.log_message(f"Unable to retrieve prices or 'close' column missing for {symbol}.")
-
-    def sell_when_trailing_stop_atr(self, position, atr_multiplier=3):
-        symbol = position.symbol
-        atr = self.calculate_atr(symbol)
-        if atr is None:
-            self.log_message(f"Unable to calculate ATR for {symbol}.")
-            return
-
-        historical_prices = self.get_historical_prices(symbol, length=2)  # Solo necesitamos los dos últimos precios
-        prices_df = historical_prices.df if historical_prices else None
-
-        if prices_df is not None and 'close' in prices_df.columns:
-            latest_price = prices_df['close'].iloc[-1]
-            previous_price = prices_df['close'].iloc[-2]
-
-            if hasattr(position, 'peak_price'):
-                position.peak_price = max(position.peak_price, previous_price)
-            else:
-                position.peak_price = previous_price  # Inicializar peak_price si no está presente
-
-            stop_price = position.peak_price - atr * atr_multiplier
-
-            if latest_price < stop_price:
-                self.log_message(f"{symbol}: Price {latest_price} has fallen below the trailing stop {stop_price}, preparing to sell.")
-                if position.quantity > 0:
-                    order = self.create_order(symbol, position.quantity, "sell")
-                    self.submit_order(order)
-                    self.log_message(f"Placed order to sell all {position.quantity} shares of {symbol} at price {latest_price}.")
-                    position.peak_price = None  # Resetear peak_price después de la venta
-                else:
-                    self.log_message(f"No position to sell for {symbol}.")
-            else:
-                self.log_message(f"{symbol}: Price is still above the trailing stop. No sell action taken.")
-        else:
-            self.log_message(f"Unable to retrieve prices or 'close' column missing for {symbol}.")
     ############################
     ### FUNCIONES AUXILIARES ###
     ############################
@@ -299,19 +323,19 @@ class TrendFollowingStrategy(MessagingStrategy):
         if historical_prices is None or 'high' not in historical_prices.df.columns or 'low' not in historical_prices.df.columns or 'close' not in historical_prices.df.columns:
             return None
 
-        # Asegúrate de que los cálculos se realizan sobre un DataFrame de pandas
         df = historical_prices.df
         high_low = df['high'] - df['low']
         high_close = np.abs(df['high'] - df['close'].shift())
         low_close = np.abs(df['low'] - df['close'].shift())
-        
-        # Combine all three into a DataFrame and take the max
-        tr = pd.DataFrame({'high_low': high_low, 'high_close': high_close, 'low_close': low_close}).max(axis=1)
 
-        # Calcula el ATR usando rolling y mean sobre la serie pandas
+        # Usar np.maximum.reduce para calcular el TR y luego convertirlo a una Serie de pandas
+        tr = pd.Series(np.maximum.reduce([high_low, high_close, low_close]))
+
+        # Calcular el ATR usando rolling y mean sobre la serie pandas
         atr = tr.rolling(window=period).mean().iloc[-1]
         return atr
-    
+
+
     ####################################
     #### FUNCIONES DE COMPRA INICIAL ###
     ####################################
@@ -364,10 +388,6 @@ class TrendFollowingStrategy(MessagingStrategy):
     def get_all_symbols(self):
         return self.assets
     
-    def get_backtesting_symbols(self):
-        return ["GOOG", "TSLA", "AMZN", "NVDA", "AAPL", "MSFT", "META", "AMD", "WMT", "PEP", "LLY"]
-        #return ["AMD", "WMT", "PEP", "LLY"]
-        #return ["GOOG", "TSLA", "AMZN", "NVDA", "AAPL", "MSFT", "META"]
 
     # TODO: Crear funciones para añadir/quitar símbolos desde telegram
 
@@ -376,20 +396,21 @@ class TrendFollowingStrategy(MessagingStrategy):
         if self.is_backtesting:
             return self.get_backtesting_symbols()
         
-        # Obtenemos la lista de posiciones
-        positions = self.get_positions()
-        for position in positions:
-            self.log_message(position)
-            self.log_message(position.orders)
-        
-        # Usamos una comprensión de lista para extraer los símbolos
-        symbols = [position.symbol for position in positions]
-        
-        return symbols
+        else:
+            # Obtenemos la lista de posiciones
+            positions = self.get_positions()
+            for position in positions:
+                self.log_message(position)
+                self.log_message(position.orders)
+            
+            # Usamos una comprensión de lista para extraer los símbolos
+            symbols = [position.symbol for position in positions]
+            
+            return symbols
     
 
 if __name__ == "__main__":
-    is_live = False
+    is_live = True
 
     if is_live:
         from lumibot.brokers import Alpaca
@@ -407,8 +428,8 @@ if __name__ == "__main__":
         trader.run_all()
     else:
         from config import POLYGON_CONFIG
-        backtesting_start = datetime.datetime(2023, 1, 1)
-        backtesting_end = datetime.datetime(2023, 12, 31)
+        backtesting_start = datetime.datetime(2023, 4, 1)
+        backtesting_end = datetime.datetime(2024, 4, 1)
         trading_fee = TradingFee(percent_fee=0.001)
 
         trader = Trader(backtest=True)
