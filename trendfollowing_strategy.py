@@ -16,7 +16,8 @@ class TrendFollowingStrategy(MessagingStrategy):
     def initialize(self):
         self.sleeptime = "1D"
         self.max_assets = 10
-        self.assets = self.get_start_assets()
+        self.assets = self.get_start_assets() # TODO: get from persistence!
+        self.update_assets()
 
     def get_backtesting_assets(self):
         #return ["GOOG", "TSLA", "AMZN", "NVDA", "AAPL", "MSFT", "META", "AMD", "WMT", "PEP", "LLY"]
@@ -427,7 +428,7 @@ class TrendFollowingStrategy(MessagingStrategy):
         df = foverview.screener_view()
 
         # Verificar si el DataFrame está vacío
-        if not df.empty:
+        if df and not df.empty:
             # Si el DataFrame no está vacío, extraer la lista de tickers
             symbol_list = df['Ticker'].tolist()
             self.log_message(f"Símbolos detectados por el screener: {symbol_list}")
@@ -436,8 +437,6 @@ class TrendFollowingStrategy(MessagingStrategy):
             symbol_list = []
             print("No se encontraron símbolos en el screener.")
         
-        # Añadimos los símbolos de las posiciones actuales
-
         # Quitamos duplicados manteniendo el orden
         symbol_list = list(dict.fromkeys(symbol_list))
         
@@ -449,7 +448,9 @@ class TrendFollowingStrategy(MessagingStrategy):
 
         for asset in assets:
             # Obtener datos históricos
-            data = self.get_historical_prices(asset, length=201)  # Asumiendo que esta función devuelve un DataFrame
+            historical_prices = self.get_historical_prices(asset, length=201)  # Asumiendo que esta función devuelve un DataFrame
+            data = historical_prices.df
+
 
             # Calcular SMA de 50 días y SMA de 200 días
             data['SMA50'] = data['close'].rolling(window=50).mean()
@@ -491,7 +492,7 @@ class TrendFollowingStrategy(MessagingStrategy):
     
 
 if __name__ == "__main__":
-    is_live = False
+    is_live = True
 
     if is_live:
         from lumibot.brokers import Alpaca
