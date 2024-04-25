@@ -16,7 +16,7 @@ Estrategia de tipo trend following con fines educativos
 class TrendFollowingStrategy(MessagingStrategy):
 
     def initialize(self):
-        self.sleeptime = "1D" if self.is_backtesting else "1H"
+        self.sleeptime = "1D" if self.is_backtesting else "1D"
         self.max_assets = 10
         self.assets = self.get_start_assets() # TODO: get from persistence!
         self.update_assets()
