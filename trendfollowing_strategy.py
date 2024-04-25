@@ -12,7 +12,12 @@ import os
 
 """
 Estrategia de tipo trend following con fines educativos
+
+TODO:
+    - Comprobar si funciona con Interactive Brokers
+    - Enviar mensaje diario con las ganancias / pérdidas
 """
+
 class TrendFollowingStrategy(MessagingStrategy):
 
     def initialize(self):
@@ -87,7 +92,6 @@ class TrendFollowingStrategy(MessagingStrategy):
     def check_exits(self, signal_function):
         for position in self.get_positions():
             if position.asset.asset_type != Asset.AssetType.STOCK:
-                self.log_message("It's not a stock!")
                 continue
 
             if signal_function(position):
