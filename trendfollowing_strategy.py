@@ -7,6 +7,8 @@ import datetime
 import numpy as np
 import pandas as pd
 from scipy.stats import norm
+import json
+import os
 
 """
 Estrategia de tipo trend following con fines educativos
@@ -14,7 +16,7 @@ Estrategia de tipo trend following con fines educativos
 class TrendFollowingStrategy(MessagingStrategy):
 
     def initialize(self):
-        self.sleeptime = "1D"
+        self.sleeptime = "1D" if self.is_backtesting else "1H"
         self.max_assets = 10
         self.assets = self.get_start_assets() # TODO: get from persistence!
         self.update_assets()
@@ -28,6 +30,32 @@ class TrendFollowingStrategy(MessagingStrategy):
     # TODO: Use this method for filtering and getting new potential assets to enter.
     def after_market_closes(self):
         self.update_assets()
+
+    def on_abrupt_closing(self):
+        # Definir el nombre del archivo donde se guardarán los activos
+        filename = 'assets.json'
+
+        # Abrir el archivo para escribir
+        with open(filename, 'w') as file:
+            # Serializar la lista de activos y guardarla en el archivo
+            json.dump(self.assets, file)
+
+    def load_assets(self, filename='assets.json'):
+        # Comprobar si el archivo existe
+        if os.path.exists(filename):
+            try:
+                # Abrir el archivo y cargar los activos
+                with open(filename, 'r') as file:
+                    assets = json.load(file)
+                return assets
+            except json.JSONDecodeError:
+                self.log_message("Error al decodificar el archivo de activos.")
+            except Exception as e:
+                self.log_message(f"Error al cargar el archivo de activos: {e}")
+        else:
+            self.log_message("No se encontró archivo de activos guardado.")
+
+        return []
 
     def on_trading_iteration(self):
         entry_signal = lambda symbol: (
@@ -476,8 +504,9 @@ class TrendFollowingStrategy(MessagingStrategy):
             return self.get_backtesting_assets()
         
         else:
-            return self.get_position_assets()
-        
+            # Cargar activos guardados desde un archivo
+            return self.load_assets()
+
     def get_position_assets(self):
         # Obtenemos la lista de posiciones
         positions = self.get_positions()
