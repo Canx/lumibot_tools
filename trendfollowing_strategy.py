@@ -118,7 +118,7 @@ class TrendFollowingStrategy(MessagingStrategy):
             return "No symbol provided."
 
         # Intenta obtener el último precio para verificar si el símbolo existe en el broker
-        last_price = self.get_last_price(symbol)
+        last_price = self.get_historical_prices(symbol, length=1, timestep="1 day")
         if last_price is None:
             return f"Symbol {symbol} does not exist in the broker or an error occurred retrieving the price."
 
@@ -527,8 +527,8 @@ if __name__ == "__main__":
         from lumibot.brokers import Alpaca, InteractiveBrokers
         from config import INTERACTIVE_BROKERS_CONFIG, ALPACA_CONFIG, TELEGRAM_CONFIG
         trader = Trader()
-        #broker = Alpaca(ALPACA_CONFIG)
-        broker = InteractiveBrokers(INTERACTIVE_BROKERS_CONFIG)
+        broker = Alpaca(ALPACA_CONFIG)
+        #broker = InteractiveBrokers(INTERACTIVE_BROKERS_CONFIG)
         strategy = TrendFollowingStrategy(broker)
 
         # Set telegram bot and attach to strategy
