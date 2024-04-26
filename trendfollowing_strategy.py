@@ -2,7 +2,6 @@ from lumibot.traders import Trader
 from lumibot.entities import TradingFee, Asset
 from lumibot.backtesting import PolygonDataBacktesting
 from lumibot_tools.messaging import MessagingStrategy, TelegramBotHandler
-from config import ALPACA_CONFIG, TELEGRAM_CONFIG, POLYGON_CONFIG
 import datetime
 import numpy as np
 import pandas as pd
@@ -16,6 +15,10 @@ Estrategia de tipo trend following con fines educativos
 TODO:
     - Comprobar si funciona con Interactive Brokers
     - Enviar mensaje diario con las ganancias / pérdidas
+    - Mejorar filtro de finviz
+    - Mejorar trailing stop-loss
+    - Mejorar position sizing y risk management.
+    - Ver si podemos seguir comprobando precios durante el día.
 """
 
 class TrendFollowingStrategy(MessagingStrategy):
@@ -528,10 +531,11 @@ if __name__ == "__main__":
     is_live = True
 
     if is_live:
-        from lumibot.brokers import Alpaca
-        from config import ALPACA_CONFIG, TELEGRAM_CONFIG
+        from lumibot.brokers import Alpaca, InteractiveBrokers
+        from config import INTERACTIVE_BROKERS_CONFIG, ALPACA_CONFIG, TELEGRAM_CONFIG
         trader = Trader()
-        broker = Alpaca(ALPACA_CONFIG)
+        #broker = Alpaca(ALPACA_CONFIG)
+        broker = InteractiveBrokers(INTERACTIVE_BROKERS_CONFIG)
         strategy = TrendFollowingStrategy(broker)
 
         # Set telegram bot and attach to strategy
