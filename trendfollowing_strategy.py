@@ -2,6 +2,7 @@ from lumibot.traders import Trader
 from lumibot.entities import TradingFee, Asset
 from lumibot.backtesting import PolygonDataBacktesting
 from lumibot_tools.messaging import MessagingStrategy, TelegramBotHandler
+from config import GENERAL_CONFIG
 import datetime
 import numpy as np
 import pandas as pd
@@ -520,7 +521,7 @@ class TrendFollowingStrategy(MessagingStrategy):
     
 
 if __name__ == "__main__":
-    is_live = False
+    is_live = GENERAL_CONFIG["LIVE"]
 
     if is_live:
         from lumibot.brokers import Alpaca, InteractiveBrokers
