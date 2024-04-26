@@ -20,6 +20,7 @@ TODO:
     - Mejorar trailing stop-loss
     - Mejorar position sizing y risk management.
     - Ver si podemos seguir comprobando precios durante el día.
+    - Cachear las peticiones de los datos históricos para no repetirnos
 """
 
 class TrendFollowingStrategy(MessagingStrategy):
@@ -28,22 +29,9 @@ class TrendFollowingStrategy(MessagingStrategy):
         self.sleeptime = "1D" if self.is_backtesting else "1D"
         self.max_assets = 10
         self.assets = self.load_assets() # Read start assets from assets.json
-        self.update_assets()
 
-    def get_backtesting_assets(self):
-        #return ["GOOG", "TSLA", "AMZN", "NVDA", "AAPL", "MSFT", "META", "AMD", "WMT", "PEP", "LLY"]
-        #return ["AMD", "WMT", "PEP", "LLY"]
-        #return ["TSLA", "NVDA", "GOOG", "AMZN", "AAPL", "MSFT", "META"]
-        return ["META"]
-    
-    # TODO: Use this method for filtering and getting new potential assets to enter.
-    def after_market_closes(self):
-        self.update_assets()
 
-    def on_abrupt_closing(self):
-        # Definir el nombre del archivo donde se guardarán los activos
-        filename = 'assets.json'
-
+    def save_assets(self, filename='assets.json'):
         # Abrir el archivo para escribir
         with open(filename, 'w') as file:
             # Serializar la lista de activos y guardarla en el archivo
@@ -67,6 +55,7 @@ class TrendFollowingStrategy(MessagingStrategy):
         return []
 
     def on_trading_iteration(self):
+
         entry_signal = lambda symbol: (
             self.signal_when_price_crossup_SMA(symbol, 200) or
             self.signal_when_new_high(symbol, 52*7)
@@ -77,6 +66,7 @@ class TrendFollowingStrategy(MessagingStrategy):
            self.signal_when_trailing_stop_percent(position, 4)
         )
 
+        self.update_assets()
         self.check_exits(exit_signal)
         self.check_entries(entry_signal)
 
@@ -124,6 +114,7 @@ class TrendFollowingStrategy(MessagingStrategy):
 
         if symbol not in self.assets:
             self.assets.append(symbol)
+            self.save_assets()
             return f"Symbol {symbol} added successfully."
         else:
             return f"Symbol {symbol} already exists in the list."
@@ -136,6 +127,7 @@ class TrendFollowingStrategy(MessagingStrategy):
         # Verifica si el símbolo existe en la lista
         if symbol in self.assets:
             self.assets.remove(symbol)
+            self.save_assets()
             return f"Symbol {symbol} removed successfully."
         else:
             return f"Symbol {symbol} does not exist in the list."
@@ -445,6 +437,9 @@ class TrendFollowingStrategy(MessagingStrategy):
 
             # Filter best assets (max_assets)
             self.assets = self.filter_best_assets(self.assets)
+
+            # Save assets
+            self.save_assets()
 
     def get_assets_from_screener(self):
         from finvizfinance.screener.overview import Overview
