@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import asyncio
 import threading
+import time
 
 class MessageBaseHandler(ABC):
 
@@ -14,6 +15,8 @@ class MessageBaseHandler(ABC):
     # Enqueues a message to be sent asynchronously.
     def send_message(self, text):
         coroutine = self.send_message_queue.put(text)
+        while self.loop is None:
+            time.sleep(0.1)  # Pequeña pausa para evitar saturación
         asyncio.run_coroutine_threadsafe(coroutine, self.loop)
 
     # Processes the queue of messages to be sent, calling a platform-specific method to actually send each message.
