@@ -26,7 +26,7 @@ class TrendFollowingStrategy(MessagingStrategy):
     def initialize(self):
         self.sleeptime = "1D" if self.is_backtesting else "1D"
         self.max_assets = 10
-        self.assets = self.get_start_assets() # TODO: get from persistence!
+        self.assets = self.load_assets() # Read start assets from assets.json
         self.update_assets()
 
     def get_backtesting_assets(self):
@@ -506,14 +506,6 @@ class TrendFollowingStrategy(MessagingStrategy):
 
         return best_assets
 
-    def get_start_assets(self):
-        if self.is_backtesting:
-            return self.get_backtesting_assets()
-        
-        else:
-            # Cargar activos guardados desde un archivo
-            return self.load_assets()
-
     def get_position_assets(self):
         # Obtenemos la lista de posiciones
         positions = self.get_positions()
@@ -528,7 +520,7 @@ class TrendFollowingStrategy(MessagingStrategy):
     
 
 if __name__ == "__main__":
-    is_live = True
+    is_live = False
 
     if is_live:
         from lumibot.brokers import Alpaca, InteractiveBrokers
