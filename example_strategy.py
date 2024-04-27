@@ -5,12 +5,22 @@ from config import ALPACA_CONFIG, TELEGRAM_CONFIG
 
 class ExampleStrategy(MessagingStrategy):
     
+    def initialize(self):
+        self.assets = []
     def before_starting_trading(self):
         self.send_message("before starting trading")
 
     def hola_command(self, parameters=None):
         return "hola"
     
+    def add_command(self, parameters=None):
+        self.assets.append(parameters)
+        return ', '.join(self.assets)
+
+    def remove_command(self, parameters=None):
+        self.assets.remove(parameters)
+        return ', '.join(self.assets)
+
     def on_trading_iteration(self):
         self.send_message("on trading iteration")
 
