@@ -22,12 +22,12 @@ class ExampleStrategy(MessagingStrategy):
         return ', '.join(self.assets)
 
     def on_trading_iteration(self):
-        self.send_message("on trading iteration")
+        self.log_message("on trading iteration")
 
         if self.first_iteration:
             self.order = self.create_order("SPY", 1, "buy")
             self.submit_order(self.order)
-            self.send_message("buyed 1 SPY")
+            self.log_message("buyed 1 SPY")
 
 if __name__ == "__main__":
     live = True
