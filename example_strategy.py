@@ -7,8 +7,6 @@ class ExampleStrategy(MessagingStrategy):
     
     def initialize(self):
         self.assets = []
-    def before_starting_trading(self):
-        self.send_message("before starting trading")
 
     def hola_command(self, parameters=None):
         return "hola"
@@ -22,8 +20,6 @@ class ExampleStrategy(MessagingStrategy):
         return ', '.join(self.assets)
 
     def on_trading_iteration(self):
-        self.log_message("on trading iteration")
-
         if self.first_iteration:
             self.order = self.create_order("SPY", 1, "buy")
             self.submit_order(self.order)
