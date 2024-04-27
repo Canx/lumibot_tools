@@ -3,6 +3,11 @@
 - messaging: attach a messaging bot to a strategy
 - run.py: script to run strategies easily
 
+## Messaging features
+
+- Redirects log_message to bot
+- Implement easily commands in Strategy adding a method *_command(parameters)
+
 ## Install & Upgrade
 
 ```
