@@ -208,6 +208,34 @@ class Signals:
         else:
             self.log_message(f"Unable to retrieve prices or 'close' column missing for {symbol}.")
             return False
+        
+    def order_block_signal(self, symbol, threshold_distance=0.01):
+        """
+        Genera señales de trading basadas en la proximidad a un Order Block.
+
+        Parameters:
+        symbol (str): Símbolo del activo para el cual generar la señal.
+        threshold_distance (float): Distancia máxima (en porcentaje del precio) para considerar que el precio está cerca del Order Block.
+
+        Returns:
+        bool: True si se genera una señal de entrada o salida.
+        """
+        ohlc_with_blocks = self.calculate_order_blocks(symbol)
+        if ohlc_with_blocks is None:
+            return False
+
+        latest_price = ohlc_with_blocks['close'].iloc[-1]
+        latest_block = ohlc_with_blocks.iloc[-1]
+
+        if pd.notna(latest_block['OrderBlockType']) and abs(latest_price - latest_block['OrderBlockLevel']) / latest_price <= threshold_distance:
+            if latest_block['OrderBlockType'] == 'Bullish':
+                self.log_message(f"Buy signal for {symbol} at {latest_price} near bullish order block at {latest_block['OrderBlockLevel']}.")
+                return True
+            elif latest_block['OrderBlockType'] == 'Bearish':
+                self.log_message(f"Sell signal for {symbol} at {latest_price} near bearish order block at {latest_block['OrderBlockLevel']}.")
+                return False
+
+        return False
 
     #### Internal calculation methods ###
     def calculate_atr(self, symbol, period=14):
@@ -263,3 +291,29 @@ class Signals:
         lower_band = sma - (std_dev * num_std)
 
         return upper_band.iloc[-1], sma.iloc[-1], lower_band.iloc[-1]
+    
+    def calculate_order_blocks(self, ohlc: pd.DataFrame, lookback_period=3) -> pd.DataFrame:
+        """
+        Identifica los Order Blocks en una serie de datos de precios OHLC.
+
+        Parameters:
+        ohlc (pd.DataFrame): DataFrame de precios OHLC con columnas 'open', 'high', 'low', 'close', 'volume'.
+        lookback_period (int): Número de velas anteriores a considerar para identificar un cambio significativo.
+
+        Returns:
+        pd.DataFrame: DataFrame con columnas 'OrderBlockType' y 'OrderBlockLevel'.
+        """
+        ohlc['OrderBlockType'] = np.nan
+        ohlc['OrderBlockLevel'] = np.nan
+        
+        for i in range(lookback_period, len(ohlc)):
+            if ohlc['close'].iloc[i] > ohlc['close'].iloc[i - lookback_period]:
+                if ohlc['volume'].iloc[i] > ohlc['volume'].iloc[i - lookback_period] * 1.5:  # Aumento significativo del volumen
+                    ohlc['OrderBlockType'].iloc[i] = 'Bullish'
+                    ohlc['OrderBlockLevel'].iloc[i] = ohlc['low'].iloc[i]
+            elif ohlc['close'].iloc[i] < ohlc['close'].iloc[i - lookback_period]:
+                if ohlc['volume'].iloc[i] > ohlc['volume'].iloc[i - lookback_period] * 1.5:
+                    ohlc['OrderBlockType'].iloc[i] = 'Bearish'
+                    ohlc['OrderBlockLevel'].iloc[i] = ohlc['high'].iloc[i]
+
+        return ohlc[['OrderBlockType', 'OrderBlockLevel']]
