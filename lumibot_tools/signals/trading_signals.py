@@ -1,6 +1,7 @@
 class Signals:
     def __init__(self, strategy):
         self.strategy = strategy
+        self.prices_cache = {}
 
     def get_historical_prices(self, *args, **kwargs):
         return self.strategy.get_historical_prices(*args, **kwargs)
@@ -16,12 +17,14 @@ class Signals:
             latest_price = prices_df['close'].iloc[-1]
 
             if type == 'high':
-                extreme_value = prices_df['close'].tail(days).max()
-                condition_met = latest_price == extreme_value
+                # Excluyendo el último precio del cálculo del máximo
+                extreme_value = prices_df['close'].iloc[:-1].max()  
+                condition_met = latest_price > extreme_value  # Verifica que sea mayor que el máximo anterior
                 message = "high"
             else:
-                extreme_value = prices_df['close'].tail(days).min()
-                condition_met = latest_price == extreme_value
+                # Excluyendo el último precio del cálculo del mínimo
+                extreme_value = prices_df['close'].iloc[:-1].min()  
+                condition_met = latest_price < extreme_value  # Verifica que sea menor que el mínimo anterior
                 message = "low"
 
             if condition_met:
@@ -34,6 +37,8 @@ class Signals:
             self.log_message(f"Error: No 'close' price available for {symbol}")
 
         return False
+
+
     
     def price_crosses_MA(self, symbol, length=200, ma_type='SMA', cross_direction='up'):
         historical_prices = self.get_historical_prices(symbol, length=length+1)
