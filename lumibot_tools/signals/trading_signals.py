@@ -1,3 +1,6 @@
+import numpy as np
+import pandas as pd
+
 class Signals:
     def __init__(self, strategy):
         self.strategy = strategy
@@ -106,6 +109,26 @@ class Signals:
 
         return False
     
+    def rsi_above_or_below(self, symbol, threshold, comparison='above'):
+        """
+        Compara el RSI actual con un umbral dado y devuelve True si se cumple la condición.
+        """
+        rsi_value = self.calculate_rsi(symbol)
+        if rsi_value is None:
+            return False
+        
+        if comparison == 'above' and rsi_value > threshold:
+            self.log_message(f"RSI for {symbol} is above {threshold}: {rsi_value}")
+            return True
+        elif comparison == 'below' and rsi_value < threshold:
+            self.log_message(f"RSI for {symbol} is below {threshold}: {rsi_value}")
+            return True
+        else:
+            self.log_message(f"RSI for {symbol} is {rsi_value}, does not meet the {comparison} than {threshold} condition.")
+            return False
+    
+
+    ### trailing stops ###
     def trailing_stop_percent(self, symbol, trail_percent, lookback_period=90):
         # Obtener precios históricos para el símbolo
         historical_prices = self.get_historical_prices(symbol, length=lookback_period)
@@ -157,6 +180,7 @@ class Signals:
             self.log_message(f"Unable to retrieve prices or 'close' column missing for {symbol}.")
             return False
 
+    #### Internal calculation methods ###
     def calculate_atr(self, symbol, period=14):
         historical_prices = self.get_historical_prices(symbol, length=period + 1)
         if historical_prices is None or 'high' not in historical_prices.df.columns or 'low' not in historical_prices.df.columns or 'close' not in historical_prices.df.columns:
@@ -173,3 +197,22 @@ class Signals:
         # Calcular el ATR usando rolling y mean sobre la serie pandas
         atr = tr.rolling(window=period).mean().iloc[-1]
         return atr
+    
+    def calculate_rsi(self, symbol, period=14):
+        """
+        Calcula el RSI (Índice de Fuerza Relativa) para un activo específico.
+        """
+        historical_prices = self.get_historical_prices(symbol, length=period+1)
+        if historical_prices is None or 'close' not in historical_prices.df.columns:
+            self.log_message(f"No historical close prices available for {symbol}.")
+            return None
+        
+        prices_df = historical_prices.df
+        close = prices_df['close']
+        delta = close.diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+        return rsi.iloc[-1]
