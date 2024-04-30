@@ -109,7 +109,7 @@ class Signals:
 
         return False
     
-    def rsi_above_or_below(self, symbol, threshold, comparison='above'):
+    def rsi_vs_threshold(self, symbol, threshold, comparison='above'):
         """
         Compara el RSI actual con un umbral dado y devuelve True si se cumple la condición.
         """
@@ -127,6 +127,35 @@ class Signals:
             self.log_message(f"RSI for {symbol} is {rsi_value}, does not meet the {comparison} than {threshold} condition.")
             return False
     
+    def price_vs_bollinger(self, symbol, comparison='above', band='upper'):
+        """
+        Compara el precio actual de un activo con una de las bandas de Bollinger especificadas (superior, media o inferior) y determina si está por encima o por debajo de esta.
+        """
+        upper_band, middle_band, lower_band = self.calculate_bollinger_bands(symbol)
+        latest_price = self.get_historical_prices(symbol, length=1).df['close'].iloc[-1]
+
+        if band == 'upper':
+            band_value = upper_band
+            band_name = "upper band"
+        elif band == 'middle':
+            band_value = middle_band
+            band_name = "middle band"
+        elif band == 'lower':
+            band_value = lower_band
+            band_name = "lower band"
+        else:
+            self.log_message(f"Invalid band type specified: {band}. Choose 'upper', 'middle', or 'lower'.")
+            return False
+
+        if comparison == 'above' and latest_price > band_value:
+            self.log_message(f"{symbol}: Price {latest_price} is above the {band_name}: {band_value}.")
+            return True
+        elif comparison == 'below' and latest_price < band_value:
+            self.log_message(f"{symbol}: Price {latest_price} is below the {band_name}: {band_value}.")
+            return True
+        else:
+            self.log_message(f"{symbol}: Price {latest_price} does not meet the condition of being {comparison} the {band_name} ({band_value}).")
+            return False
 
     ### trailing stops ###
     def trailing_stop_percent(self, symbol, trail_percent, lookback_period=90):
@@ -216,3 +245,21 @@ class Signals:
         rs = gain / loss
         rsi = 100 - (100 / (1 + rs))
         return rsi.iloc[-1]
+    
+    def calculate_bollinger_bands(self, symbol, period=20, num_std=2):
+        """
+        Calcula las bandas de Bollinger para un activo específico.
+        """
+        historical_prices = self.get_historical_prices(symbol, length=period)
+        if historical_prices is None or 'close' not in historical_prices.df.columns:
+            self.log_message(f"No historical close prices available for {symbol}.")
+            return None
+
+        prices_df = historical_prices.df
+        sma = prices_df['close'].rolling(window=period).mean()
+        std_dev = prices_df['close'].rolling(window=period).std()
+
+        upper_band = sma + (std_dev * num_std)
+        lower_band = sma - (std_dev * num_std)
+
+        return upper_band.iloc[-1], sma.iloc[-1], lower_band.iloc[-1]
