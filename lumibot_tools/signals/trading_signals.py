@@ -77,6 +77,52 @@ class Signals:
 
         return False
     
+    def ma_crosses(self, symbol, short_length=50, long_length=200, ma_type='SMA', cross='bullish'):
+        """
+        Detecta cruces de dos medias móviles.
+
+        Parameters:
+        symbol (str): Símbolo del activo.
+        short_length (int): Longitud de la media móvil de corto plazo.
+        long_length (int): Longitud de la media móvil de largo plazo.
+        ma_type (str): Tipo de media móvil, 'SMA' para media simple o 'EMA' para media exponencial.
+        cross (str): Tipo de cruce, 'bullish' para corto sobre largo y 'bearish' para largo sobre corto.
+
+        Returns:
+        bool: True si se detecta el cruce especificado.
+        """
+        historical_prices = self.get_historical_prices(symbol, length=max(short_length, long_length) + 1)
+        prices_df = historical_prices.df if historical_prices else None
+
+        if prices_df is not None and 'close' in prices_df.columns:
+            if ma_type == 'SMA':
+                short_ma = prices_df['close'].rolling(window=short_length).mean()
+                long_ma = prices_df['close'].rolling(window=long_length).mean()
+            elif ma_type == 'EMA':
+                short_ma = prices_df['close'].ewm(span=short_length, adjust=False).mean()
+                long_ma = prices_df['close'].ewm(span=long_length, adjust=False).mean()
+            else:
+                self.log_message(f"Unsupported MA type: {ma_type}")
+                return False
+
+            # Identificar el cruce
+            latest_short_ma = short_ma.iloc[-1]
+            latest_long_ma = long_ma.iloc[-1]
+            previous_short_ma = short_ma.iloc[-2]
+            previous_long_ma = long_ma.iloc[-2]
+
+            if cross == 'bullish':
+                if previous_short_ma < previous_long_ma and latest_short_ma > latest_long_ma:
+                    self.log_message(f"{symbol}: Short-term MA ({short_length}) has crossed above Long-term MA ({long_length}).")
+                    return True
+            elif cross == 'bearish':
+                if previous_short_ma > previous_long_ma and latest_short_ma < latest_long_ma:
+                    self.log_message(f"{symbol}: Short-term MA ({short_length}) has crossed below Long-term MA ({long_length}).")
+                    return True
+
+        return False
+
+
     def short_over_long_ma(self, symbol, short_length=50, long_length=200, ma_type='SMA'):
         historical_prices = self.get_historical_prices(symbol, length=max(short_length, long_length) + 1)
         prices_df = historical_prices.df if historical_prices else None
