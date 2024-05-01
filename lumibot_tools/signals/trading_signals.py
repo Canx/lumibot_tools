@@ -209,33 +209,34 @@ class Signals:
             self.log_message(f"Unable to retrieve prices or 'close' column missing for {symbol}.")
             return False
         
-    def order_block_signal(self, symbol, threshold_distance=0.01):
+    def order_block_signal(self, symbol, block_type, threshold_distance=0.01):
         """
-        Genera señales de trading basadas en la proximidad a un Order Block.
+        Genera señales de trading basadas en la proximidad a un Order Block específico (alcista o bajista).
 
         Parameters:
         symbol (str): Símbolo del activo para el cual generar la señal.
+        block_type (str): Tipo de Order Block a detectar ('bullish' para alcista, 'bearish' para bajista).
         threshold_distance (float): Distancia máxima (en porcentaje del precio) para considerar que el precio está cerca del Order Block.
 
         Returns:
-        bool: True si se genera una señal de entrada o salida.
+        bool: True si se detecta una señal relevante, False en caso contrario.
         """
         ohlc_with_blocks = self.calculate_order_blocks(symbol)
         if ohlc_with_blocks is None:
-            return False
+            return False  # No data available
 
         latest_price = ohlc_with_blocks['close'].iloc[-1]
         latest_block = ohlc_with_blocks.iloc[-1]
 
-        if pd.notna(latest_block['OrderBlockType']) and abs(latest_price - latest_block['OrderBlockLevel']) / latest_price <= threshold_distance:
-            if latest_block['OrderBlockType'] == 'Bullish':
-                self.log_message(f"Buy signal for {symbol} at {latest_price} near bullish order block at {latest_block['OrderBlockLevel']}.")
-                return True
-            elif latest_block['OrderBlockType'] == 'Bearish':
-                self.log_message(f"Sell signal for {symbol} at {latest_price} near bearish order block at {latest_block['OrderBlockLevel']}.")
-                return False
+        if block_type == 'bullish' and latest_block['OrderBlockType'] == 'Bullish' and abs(latest_price - latest_block['OrderBlockLevel']) / latest_price <= threshold_distance:
+            self.log_message(f"Buy signal for {symbol} at {latest_price} near bullish order block at {latest_block['OrderBlockLevel']}.")
+            return True
 
-        return False
+        elif block_type == 'bearish' and latest_block['OrderBlockType'] == 'Bearish' and abs(latest_price - latest_block['OrderBlockLevel']) / latest_price <= threshold_distance:
+            self.log_message(f"Sell signal for {symbol} at {latest_price} near bearish order block at {latest_block['OrderBlockLevel']}.")
+            return True
+
+        return False  # No relevant signal found
 
     #### Internal calculation methods ###
     def calculate_atr(self, symbol, period=14):
