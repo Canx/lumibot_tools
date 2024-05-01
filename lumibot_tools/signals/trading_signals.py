@@ -122,6 +122,47 @@ class Signals:
 
         return False
 
+    def ma_cross_with_atr_validation(self, symbol, short_length=50, long_length=200, ma_type='SMA', cross='bullish', atr_length=14, atr_factor=1):
+        """
+        Detecta cruces de dos medias móviles validados por el ATR para asegurar que la volatilidad respalda el movimiento.
+        
+        Parameters:
+        symbol (str): Símbolo del activo.
+        short_length (int): Longitud de la media móvil de corto plazo.
+        long_length (int): Longitud de la media móvil de largo plazo.
+        ma_type (str): Tipo de media móvil, 'SMA' o 'EMA'.
+        cross (str): Tipo de cruce, 'bullish' para corto sobre largo y 'bearish' para largo sobre corto.
+        atr_length (int): Período de cálculo del ATR.
+        atr_factor (float): Factor para evaluar si el ATR actual es suficiente para validar el movimiento.
+
+        Returns:
+        bool: True si se detecta el cruce validado por el ATR.
+        """
+        # Verifica primero el cruce de medias móviles
+        if self.ma_crosses(symbol, short_length, long_length, ma_type, cross):
+            # Si hay cruce, calcula el ATR y valida
+            atr = self.calculate_atr(symbol, atr_length)
+            if atr is None:
+                self.log_message(f"No ATR data available for {symbol}.")
+                return False
+
+            # Obtén el precio más reciente
+            historical_prices = self.get_historical_prices(symbol, length=1)
+            if historical_prices is None or 'close' not in historical_prices.df.columns:
+                return False
+            latest_price = historical_prices.df['close'].iloc[-1]
+
+            # Verifica si el ATR es suficientemente alto para respaldar el cruce
+            atr_threshold = latest_price * atr_factor / 100
+            if atr >= atr_threshold:
+                self.log_message(f"{symbol}: MA cross validated by ATR at {atr}, threshold was {atr_threshold}.")
+                return True
+            else:
+                self.log_message(f"{symbol}: MA cross found but ATR at {atr} below threshold {atr_threshold}, not validated.")
+                return False
+        else:
+            return False
+
 
     def short_over_long_ma(self, symbol, short_length=50, long_length=200, ma_type='SMA'):
         historical_prices = self.get_historical_prices(symbol, length=max(short_length, long_length) + 1)
