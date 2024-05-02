@@ -80,7 +80,7 @@ TELEGRAM_CONFIG = {
 
 ## Signals
 
-- check implemented signals in code 
+- check implemented signals in code [lumibot_tools/signals/trading_signals.py](./lumibot_tools/signals/trading_signals.py)
 ### Usage
 
 ```
