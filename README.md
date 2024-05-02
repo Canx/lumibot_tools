@@ -1,7 +1,7 @@
 # lumibot_tools
 
 - messaging: attach a messaging bot to a strategy
-- signal: true/false signals based on technical indicators
+- signals: true/false signals based on technical indicators
 - bin/run.py: script to run strategies easily
 
 ## Install & Upgrade
