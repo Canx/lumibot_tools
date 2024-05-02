@@ -92,15 +92,15 @@ class ExampleStrategy(Strategy):
     def initialize(self):
         self.signals = Signals(self)
 
-    def entry_signal(self, symbol):
+    def entry_signal(self, asset):
         return (
-            self.signals.ma_cross_with_atr_validation(symbol, short_length=12, long_length=25, ma_type='EMA', cross='bullish', atr_length=14, atr_factor=1) and
-            self.signals.short_over_long_ma(symbol, short_length=50, long_length=200, ma_type='EMA')
+            self.signals.ma_cross_with_atr_validation(asset, short_length=12, long_length=25, ma_type='EMA', cross='bullish', atr_length=14, atr_factor=1) and
+            self.signals.short_over_long_ma(asset, short_length=50, long_length=200, ma_type='EMA')
         )
     
-    def exit_signal(self, position):
+    def exit_signal(self, asset):
         return (
-            self.signals.ma_crosses(position.symbol, short_length=21, long_length=55, ma_type='EMA', cross='bearish')
+            self.signals.ma_crosses(asset, short_length=21, long_length=55, ma_type='EMA', cross='bearish')
         )
 
     def on_trading_iteration(self):
@@ -108,13 +108,13 @@ class ExampleStrategy(Strategy):
         self.check_entries(self.entry_signal)
 
     def check_entries(self, signal_function):
-        for symbol in self.assets:
-                if signal_function(symbol):
-                    self.enter_position(symbol)
+        for asset in self.assets:
+                if signal_function(asset):
+                    self.enter_position(asset)
  
     def check_exits(self, signal_function):
         for position in self.get_positions():
-            if signal_function(position):
+            if signal_function(position.asset):
                     self.exit_position(position)
     
 ```
