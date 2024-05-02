@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pandas_ta as ta
 
 class Signals:
     def __init__(self, strategy):
@@ -117,31 +118,30 @@ class Signals:
         prices_df = historical_prices.df if historical_prices else None
 
         if prices_df is not None and 'close' in prices_df.columns:
+            if 'datetime' in prices_df.columns:
+                prices_df.set_index('datetime', inplace=True)
+
             if ma_type == 'SMA':
-                short_ma = prices_df['close'].rolling(window=short_length).mean()
-                long_ma = prices_df['close'].rolling(window=long_length).mean()
+                prices_df['short_ma'] = ta.sma(prices_df['close'], length=short_length)
+                prices_df['long_ma'] = ta.sma(prices_df['close'], length=long_length)
             elif ma_type == 'EMA':
-                short_ma = prices_df['close'].ewm(span=short_length, adjust=False).mean()
-                long_ma = prices_df['close'].ewm(span=long_length, adjust=False).mean()
+                prices_df['short_ma'] = ta.ema(prices_df['close'], length=short_length)
+                prices_df['long_ma'] = ta.ema(prices_df['close'], length=long_length)
             else:
                 self.log_message(f"Unsupported MA type: {ma_type}")
                 return False
 
-            latest_short_ma = short_ma.iloc[-1]
-            latest_long_ma = long_ma.iloc[-1]
-            previous_short_ma = short_ma.iloc[-2]
-            previous_long_ma = long_ma.iloc[-2]
-
             if cross == 'bullish':
-                if previous_short_ma < previous_long_ma and latest_short_ma > latest_long_ma:
-                    self.log_message(f"{asset.symbol}: Short-term MA ({short_length}) has crossed above Long-term MA ({long_length}).")
-                    return True
-            elif cross == 'bearish':
-                if previous_short_ma > previous_long_ma and latest_short_ma < latest_long_ma:
-                    self.log_message(f"{asset.symbol}: Short-term MA ({short_length}) has crossed below Long-term MA ({long_length}).")
-                    return True
+                condition = (prices_df['short_ma'].shift(1) < prices_df['long_ma'].shift(1)) & (prices_df['short_ma'] > prices_df['long_ma'])
+            else:
+                condition = (prices_df['short_ma'].shift(1) > prices_df['long_ma'].shift(1)) & (prices_df['short_ma'] < prices_df['long_ma'])
+
+            if condition.iloc[-1]:
+                self.log_message(f"{asset.symbol}: Short-term MA ({short_length}) has crossed {'above' if cross == 'bullish' else 'below'} Long-term MA ({long_length}).")
+                return True
 
         return False
+    
 
     def ma_cross_with_atr_validation(self, asset, short_length=50, long_length=200, ma_type='SMA', cross='bullish', atr_length=14, atr_factor=1):
         """
