@@ -80,10 +80,14 @@ TELEGRAM_CONFIG = {
 
 ## Signals
 
+- check implemented signals in code 
 ### Usage
 
 ```
-class ExampleStrategy(MessagingStrategy):
+
+from lumibot_tools.signals import Signals
+
+class ExampleStrategy(Strategy):
 
     def initialize(self):
         self.signals = Signals(self)
