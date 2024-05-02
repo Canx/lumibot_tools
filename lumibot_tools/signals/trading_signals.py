@@ -13,6 +13,18 @@ class Signals:
         return self.strategy.log_message(*args, **kwargs)
 
     def new_price_high_or_low(self, symbol, days, type='high'):
+        """
+        Checks if the latest price for a given symbol is either a new high or low over a specified number of days.
+
+        Parameters:
+        symbol (str): The ticker symbol for the asset.
+        days (int): The number of days over which to check for new highs or lows.
+        type (str, optional): Specifies whether to check for a new 'high' or 'low'. Defaults to 'high'.
+
+        Returns:
+        bool: True if a new high or low is detected, False otherwise.
+        """
+
         historical_prices = self.get_historical_prices(symbol, length=days)
         prices_df = historical_prices.df if historical_prices else None
 
@@ -20,14 +32,12 @@ class Signals:
             latest_price = prices_df['close'].iloc[-1]
 
             if type == 'high':
-                # Excluyendo el último precio del cálculo del máximo
-                extreme_value = prices_df['close'].iloc[:-1].max()  
-                condition_met = latest_price > extreme_value  # Verifica que sea mayor que el máximo anterior
+                extreme_value = prices_df['close'].iloc[:-1].max() 
+                condition_met = latest_price > extreme_value 
                 message = "high"
             else:
-                # Excluyendo el último precio del cálculo del mínimo
-                extreme_value = prices_df['close'].iloc[:-1].min()  
-                condition_met = latest_price < extreme_value  # Verifica que sea menor que el mínimo anterior
+                extreme_value = prices_df['close'].iloc[:-1].min()
+                condition_met = latest_price < extreme_value
                 message = "low"
 
             if condition_met:
@@ -36,7 +46,6 @@ class Signals:
             else:
                 self.log_message(f"No {message} condition met for {symbol}")
         else:
-            # Mensaje de error si no se encuentra la columna 'close'
             self.log_message(f"Error: No 'close' price available for {symbol}")
 
         return False
@@ -44,6 +53,19 @@ class Signals:
 
     
     def price_crosses_MA(self, symbol, length=200, ma_type='SMA', cross_direction='up'):
+        """
+        Determines if the price of a given symbol has crossed its moving average in a specified direction.
+
+        Parameters:
+        symbol (str): The ticker symbol for the asset.
+        length (int): The length of the moving average.
+        ma_type (str): Type of moving average, either 'SMA' (Simple Moving Average) or 'EMA' (Exponential Moving Average).
+        cross_direction (str): The direction of the cross, either 'up' for upward or 'down' for downward.
+
+        Returns:
+        bool: True if the price crosses the moving average as specified, False otherwise.
+        """
+
         historical_prices = self.get_historical_prices(symbol, length=length+1)
         prices_df = historical_prices.df if historical_prices else None
 
@@ -79,18 +101,19 @@ class Signals:
     
     def ma_crosses(self, symbol, short_length=50, long_length=200, ma_type='SMA', cross='bullish'):
         """
-        Detecta cruces de dos medias móviles.
+        Detects when a short-term moving average crosses a long-term moving average.
 
         Parameters:
-        symbol (str): Símbolo del activo.
-        short_length (int): Longitud de la media móvil de corto plazo.
-        long_length (int): Longitud de la media móvil de largo plazo.
-        ma_type (str): Tipo de media móvil, 'SMA' para media simple o 'EMA' para media exponencial.
-        cross (str): Tipo de cruce, 'bullish' para corto sobre largo y 'bearish' para largo sobre corto.
+        symbol (str): The ticker symbol for the asset.
+        short_length (int): The period of the short-term moving average.
+        long_length (int): The period of the long-term moving average.
+        ma_type (str): Type of moving average, 'SMA' for simple or 'EMA' for exponential.
+        cross (str): Type of cross, 'bullish' for short-term crossing above long-term, 'bearish' for short-term crossing below long-term.
 
         Returns:
-        bool: True si se detecta el cruce especificado.
+        bool: True if the specified cross is detected, False otherwise.
         """
+
         historical_prices = self.get_historical_prices(symbol, length=max(short_length, long_length) + 1)
         prices_df = historical_prices.df if historical_prices else None
 
@@ -105,7 +128,6 @@ class Signals:
                 self.log_message(f"Unsupported MA type: {ma_type}")
                 return False
 
-            # Identificar el cruce
             latest_short_ma = short_ma.iloc[-1]
             latest_long_ma = long_ma.iloc[-1]
             previous_short_ma = short_ma.iloc[-2]
@@ -124,35 +146,32 @@ class Signals:
 
     def ma_cross_with_atr_validation(self, symbol, short_length=50, long_length=200, ma_type='SMA', cross='bullish', atr_length=14, atr_factor=1):
         """
-        Detecta cruces de dos medias móviles validados por el ATR para asegurar que la volatilidad respalda el movimiento.
-        
+        Detects moving average crosses validated by ATR to ensure the movement is backed by volatility.
+
         Parameters:
-        symbol (str): Símbolo del activo.
-        short_length (int): Longitud de la media móvil de corto plazo.
-        long_length (int): Longitud de la media móvil de largo plazo.
-        ma_type (str): Tipo de media móvil, 'SMA' o 'EMA'.
-        cross (str): Tipo de cruce, 'bullish' para corto sobre largo y 'bearish' para largo sobre corto.
-        atr_length (int): Período de cálculo del ATR.
-        atr_factor (float): Factor para evaluar si el ATR actual es suficiente para validar el movimiento.
+        symbol (str): The ticker symbol for the asset.
+        short_length (int): The period of the short-term moving average.
+        long_length (int): The period of the long-term moving average.
+        ma_type (str): Type of moving average, either 'SMA' or 'EMA'.
+        cross (str): Type of cross, 'bullish' for short-term over long-term and 'bearish' for long-term over short-term.
+        atr_length (int): The period for calculating the Average True Range (ATR).
+        atr_factor (float): Factor to assess if the current ATR is sufficient to validate the movement.
 
         Returns:
-        bool: True si se detecta el cruce validado por el ATR.
+        bool: True if a cross validated by ATR is detected, False otherwise.
         """
-        # Verifica primero el cruce de medias móviles
+
         if self.ma_crosses(symbol, short_length, long_length, ma_type, cross):
-            # Si hay cruce, calcula el ATR y valida
             atr = self.calculate_atr(symbol, atr_length)
             if atr is None:
                 self.log_message(f"No ATR data available for {symbol}.")
                 return False
 
-            # Obtén el precio más reciente
             historical_prices = self.get_historical_prices(symbol, length=1)
             if historical_prices is None or 'close' not in historical_prices.df.columns:
                 return False
             latest_price = historical_prices.df['close'].iloc[-1]
 
-            # Verifica si el ATR es suficientemente alto para respaldar el cruce
             atr_threshold = latest_price * atr_factor / 100
             if atr >= atr_threshold:
                 self.log_message(f"{symbol}: MA cross validated by ATR at {atr}, threshold was {atr_threshold}.")
@@ -198,8 +217,17 @@ class Signals:
     
     def rsi_vs_threshold(self, symbol, threshold, comparison='above'):
         """
-        Compara el RSI actual con un umbral dado y devuelve True si se cumple la condición.
+        Compares the current Relative Strength Index (RSI) of a symbol with a given threshold and returns True if the condition is met.
+
+        Parameters:
+        symbol (str): The ticker symbol for the asset.
+        threshold (float): The threshold to compare against.
+        comparison (str): Condition to test ('above' or 'below').
+
+        Returns:
+        bool: True if the RSI meets the condition specified, False otherwise.
         """
+
         rsi_value = self.calculate_rsi(symbol)
         if rsi_value is None:
             return False
@@ -216,8 +244,17 @@ class Signals:
     
     def price_vs_bollinger(self, symbol, comparison='above', band='upper'):
         """
-        Compara el precio actual de un activo con una de las bandas de Bollinger especificadas (superior, media o inferior) y determina si está por encima o por debajo de esta.
+        Compares the current price of an asset against a specified Bollinger Band (upper, middle, or lower) and determines if it is above or below it.
+
+        Parameters:
+        symbol (str): The ticker symbol for the asset.
+        comparison (str): Specifies whether to check if the price is 'above' or 'below' the band.
+        band (str): Specifies which Bollinger Band to compare against ('upper', 'middle', 'lower').
+
+        Returns:
+        bool: True if the price meets the condition specified relative to the Bollinger Band, False otherwise.
         """
+
         upper_band, middle_band, lower_band = self.calculate_bollinger_bands(symbol)
         latest_price = self.get_historical_prices(symbol, length=1).df['close'].iloc[-1]
 
@@ -244,27 +281,47 @@ class Signals:
             self.log_message(f"{symbol}: Price {latest_price} does not meet the condition of being {comparison} the {band_name} ({band_value}).")
             return False
 
-    ### trailing stops ###
+
     def trailing_stop_percent(self, symbol, trail_percent, lookback_period=90):
-        # Obtener precios históricos para el símbolo
+        """
+        Implements a trailing stop based on a percentage from the peak price over a specified lookback period.
+
+        Parameters:
+        symbol (str): The ticker symbol for the asset.
+        trail_percent (float): The percentage from the peak price at which the stop is set.
+        lookback_period (int): The number of days to look back to determine the peak price.
+
+        Returns:
+        bool: True if the current price has fallen below the trailing stop price, False otherwise.
+        """
+        
         historical_prices = self.get_historical_prices(symbol, length=lookback_period)
         prices_df = historical_prices.df if historical_prices else None
 
         if prices_df is not None and 'close' in prices_df.columns:
             latest_price = prices_df['close'].iloc[-1]
-            peak_price = prices_df['close'].max()  # Calcular el máximo histórico de todos los precios disponibles
+            peak_price = prices_df['close'].max()
 
-            # Calcular el precio de parada basado en el peak_price
             stop_price = peak_price * (1 - trail_percent / 100)
 
-            # Verificar si el precio actual está por debajo del precio de parada
             if latest_price < stop_price:
                 self.log_message(f"{symbol}: Price {latest_price} has fallen below the trailing stop {stop_price}.")
                 return True
         return False
     
     def trailing_stop_atr(self, symbol, atr_multiplier=3, lookback_period=90):
-        # Calcular ATR usando un periodo estándar de 14 días (o ajustar según sea necesario)
+        """
+        Implements a trailing stop based on the Average True Range (ATR), adjusted by a specified multiplier.
+
+        Parameters:
+        symbol (str): The ticker symbol for the asset.
+        atr_multiplier (float): The factor by which the ATR is multiplied to set the stop price.
+        lookback_period (int): The number of days to look back to determine the peak price and calculate the ATR.
+
+        Returns:
+        bool: True if the current price has fallen below the trailing stop price, False otherwise.
+        """
+
         atr = self.calculate_atr(symbol, 14)
         if atr is None:
             self.log_message(f"Unable to calculate ATR for {symbol}.")
@@ -272,21 +329,18 @@ class Signals:
         else:
             self.log_message(f"ATR for {symbol} calculated: {atr}")
 
-        # Obtener precios históricos con el lookback_period para recalcular el peak_price
         historical_prices = self.get_historical_prices(symbol, length=lookback_period)
         prices_df = historical_prices.df if historical_prices else None
 
         if prices_df is not None and 'close' in prices_df.columns:
             latest_price = prices_df['close'].iloc[-1]
-            peak_price = prices_df['close'].max()  # Recalcular el máximo histórico de todos los precios disponibles
+            peak_price = prices_df['close'].max()
 
             self.log_message(f"Calculated peak price for {symbol}: {peak_price}")
 
-            # Calcular el precio de parada utilizando el ATR y el multiplicador
             stop_price = peak_price - atr * atr_multiplier
             self.log_message(f"Calculated trailing stop for {symbol}: {stop_price} (Peak price: {peak_price}, ATR: {atr}, Multiplier: {atr_multiplier})")
 
-            # Verificar si el precio actual está por debajo del precio de parada
             if latest_price < stop_price:
                 self.log_message(f"{symbol}: Price {latest_price} has fallen below the trailing stop {stop_price}.")
                 return True
@@ -298,19 +352,20 @@ class Signals:
         
     def order_block_signal(self, symbol, block_type, threshold_distance=0.01):
         """
-        Genera señales de trading basadas en la proximidad a un Order Block específico (alcista o bajista).
+        Generates trading signals based on the proximity to a specific order block type (bullish or bearish).
 
         Parameters:
-        symbol (str): Símbolo del activo para el cual generar la señal.
-        block_type (str): Tipo de Order Block a detectar ('bullish' para alcista, 'bearish' para bajista).
-        threshold_distance (float): Distancia máxima (en porcentaje del precio) para considerar que el precio está cerca del Order Block.
+        symbol (str): The ticker symbol for the asset.
+        block_type (str): The type of order block to detect ('bullish' for buying opportunities, 'bearish' for selling opportunities).
+        threshold_distance (float): The maximum percentage distance from the order block level to consider the price to be near the order block.
 
         Returns:
-        bool: True si se detecta una señal relevante, False en caso contrario.
+        bool: True if a relevant signal is detected near the order block, False otherwise.
         """
+
         ohlc_with_blocks = self.calculate_order_blocks(symbol)
         if ohlc_with_blocks is None:
-            return False  # No data available
+            return False
 
         latest_price = ohlc_with_blocks['close'].iloc[-1]
         latest_block = ohlc_with_blocks.iloc[-1]
@@ -323,10 +378,21 @@ class Signals:
             self.log_message(f"Sell signal for {symbol} at {latest_price} near bearish order block at {latest_block['OrderBlockLevel']}.")
             return True
 
-        return False  # No relevant signal found
+        return False
 
-    #### Internal calculation methods ###
+
     def calculate_atr(self, symbol, period=14):
+        """
+        Calculates the Average True Range (ATR) for a given asset over a specified period.
+
+        Parameters:
+        symbol (str): The ticker symbol for the asset.
+        period (int): The number of days over which to calculate the ATR.
+
+        Returns:
+        float: The ATR value if available, or None if necessary data is missing.
+        """
+
         historical_prices = self.get_historical_prices(symbol, length=period + 1)
         if historical_prices is None or 'high' not in historical_prices.df.columns or 'low' not in historical_prices.df.columns or 'close' not in historical_prices.df.columns:
             return None
@@ -336,17 +402,23 @@ class Signals:
         high_close = np.abs(df['high'] - df['close'].shift())
         low_close = np.abs(df['low'] - df['close'].shift())
 
-        # Usar np.maximum.reduce para calcular el TR y luego convertirlo a una Serie de pandas
         tr = pd.Series(np.maximum.reduce([high_low, high_close, low_close]))
 
-        # Calcular el ATR usando rolling y mean sobre la serie pandas
         atr = tr.rolling(window=period).mean().iloc[-1]
         return atr
     
     def calculate_rsi(self, symbol, period=14):
         """
-        Calcula el RSI (Índice de Fuerza Relativa) para un activo específico.
+        Calculates the Relative Strength Index (RSI) for a given asset over a specified period.
+
+        Parameters:
+        symbol (str): The ticker symbol for the asset.
+        period (int): The number of days over which to calculate the RSI.
+
+        Returns:
+        float: The RSI value if available, or None if there are no historical close prices.
         """
+
         historical_prices = self.get_historical_prices(symbol, length=period+1)
         if historical_prices is None or 'close' not in historical_prices.df.columns:
             self.log_message(f"No historical close prices available for {symbol}.")
@@ -364,8 +436,17 @@ class Signals:
     
     def calculate_bollinger_bands(self, symbol, period=20, num_std=2):
         """
-        Calcula las bandas de Bollinger para un activo específico.
+        Calculates Bollinger Bands for a given asset over a specified period.
+
+        Parameters:
+        symbol (str): The ticker symbol for the asset.
+        period (int): The number of days for calculating the simple moving average (SMA) at the center of the bands.
+        num_std (int): The number of standard deviations to determine the upper and lower bands.
+
+        Returns:
+        tuple: A tuple containing the upper band, SMA (middle band), and lower band values. Returns None if necessary data is missing.
         """
+
         historical_prices = self.get_historical_prices(symbol, length=period)
         if historical_prices is None or 'close' not in historical_prices.df.columns:
             self.log_message(f"No historical close prices available for {symbol}.")
@@ -382,15 +463,16 @@ class Signals:
     
     def calculate_order_blocks(self, ohlc: pd.DataFrame, lookback_period=3) -> pd.DataFrame:
         """
-        Identifica los Order Blocks en una serie de datos de precios OHLC.
+        Identifies Order Blocks in a series of OHLC (Open, High, Low, Close) price data based on significant volume changes.
 
         Parameters:
-        ohlc (pd.DataFrame): DataFrame de precios OHLC con columnas 'open', 'high', 'low', 'close', 'volume'.
-        lookback_period (int): Número de velas anteriores a considerar para identificar un cambio significativo.
+        ohlc (pd.DataFrame): DataFrame containing OHLC price data.
+        lookback_period (int): The number of candles to look back to identify a significant change for the definition of an Order Block.
 
         Returns:
-        pd.DataFrame: DataFrame con columnas 'OrderBlockType' y 'OrderBlockLevel'.
+        pd.DataFrame: A DataFrame with 'OrderBlockType' and 'OrderBlockLevel' columns, indicating the type and level of detected Order Blocks.
         """
+
         ohlc['OrderBlockType'] = np.nan
         ohlc['OrderBlockLevel'] = np.nan
         
