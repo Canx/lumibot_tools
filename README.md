@@ -15,7 +15,7 @@ pip install --upgrade git+https://github.com/Canx/lumibot_tools.git
 ### Features
 
 - Redirects log_message to bot
-- Implement easily commands in Strategy adding a method *_command(parameters)
+- Implement easily bot commands in Strategy adding a method *_command(parameters)
 
 ### Usage
 
@@ -67,6 +67,7 @@ if __name__ == "__main__":
 ### Suported platforms
 
 - Telegram
+- Discord (TODO)
 
 Add to your config.py file:
 
