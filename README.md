@@ -1,12 +1,8 @@
 # lumibot_tools
 
 - messaging: attach a messaging bot to a strategy
-- run.py: script to run strategies easily
-
-## Messaging features
-
-- Redirects log_message to bot
-- Implement easily commands in Strategy adding a method *_command(parameters)
+- signal: true/false signals based on technical indicators
+- bin/run.py: script to run strategies easily
 
 ## Install & Upgrade
 
@@ -14,7 +10,14 @@
 pip install --upgrade git+https://github.com/Canx/lumibot_tools.git
 ```
 
-## Usage
+## Messaging
+
+### Features
+
+- Redirects log_message to bot
+- Implement easily commands in Strategy adding a method *_command(parameters)
+
+### Usage
 
 Example strategy that inherits from MessagingStrategy class and attach TelegramBotHandler to the strategy
 ```
@@ -61,7 +64,7 @@ if __name__ == "__main__":
     trader.run_all()
 ```
 
-## Suported platforms
+### Suported platforms
 
 - Telegram
 
@@ -74,3 +77,39 @@ TELEGRAM_CONFIG = {
 }
 ```
 
+## Signals
+
+### Usage
+
+```
+class ExampleStrategy(MessagingStrategy):
+
+    def initialize(self):
+        self.signals = Signals(self)
+
+    def entry_signal(self, symbol):
+        return (
+            self.signals.ma_cross_with_atr_validation(symbol, short_length=12, long_length=25, ma_type='EMA', cross='bullish', atr_length=14, atr_factor=1) and
+            self.signals.short_over_long_ma(symbol, short_length=50, long_length=200, ma_type='EMA')
+        )
+    
+    def exit_signal(self, position):
+        return (
+            self.signals.ma_crosses(position.symbol, short_length=21, long_length=55, ma_type='EMA', cross='bearish')
+        )
+
+    def on_trading_iteration(self):
+        self.check_exits(self.exit_signal)
+        self.check_entries(self.entry_signal)
+
+    def check_entries(self, signal_function):
+        for symbol in self.assets:
+                if signal_function(symbol):
+                    self.enter_position(symbol)
+ 
+    def check_exits(self, signal_function):
+        for position in self.get_positions():
+            if signal_function(position):
+                    self.exit_position(position)
+    
+```
