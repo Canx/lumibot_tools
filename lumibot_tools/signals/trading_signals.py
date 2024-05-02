@@ -214,6 +214,59 @@ class Signals:
 
         return False
     
+    def macd_signal(self, asset, fast_length=12, slow_length=26, signal_length=9, entry_type='bullish'):
+        """
+        Determines if a MACD line crosses its signal line, indicating potential buy or sell signals.
+
+        Parameters:
+        asset (Asset): The Asset class for the asset.
+        fast_length (int): The period of the fast EMA.
+        slow_length (int): The period of the slow EMA.
+        signal_length (int): The period of the signal line.
+        entry_type (str): Type of entry signal, 'bullish' for MACD crossing above signal line, 'bearish' for MACD crossing below signal line.
+
+        Returns:
+        bool: True if the specified MACD crossover is detected, False otherwise.
+        """
+        historical_prices = self.get_historical_prices(asset, length=max(fast_length, slow_length, signal_length) + signal_length)
+        prices_df = historical_prices.df if historical_prices else None
+
+        if prices_df is not None and 'close' in prices_df.columns:
+            # Calculate MACD using the pandas_ta library
+            macd = ta.macd(prices_df['close'], fast=fast_length, slow=slow_length, signal=signal_length)
+
+            # Dynamic column names based on parameters
+            macd_line_col = f'MACD_{fast_length}_{slow_length}_{signal_length}'
+            signal_line_col = f'MACDs_{fast_length}_{slow_length}_{signal_length}'
+            macd_histogram_col = f'MACDh_{fast_length}_{slow_length}_{signal_length}'
+
+            if macd_line_col in macd.columns and signal_line_col in macd.columns:
+                macd_line = macd[macd_line_col]
+                signal_line = macd[signal_line_col]
+
+                if entry_type == 'bullish':
+                    condition = (macd_line.shift(1) < signal_line.shift(1)) & (macd_line > signal_line)
+                elif entry_type == 'bearish':
+                    condition = (macd_line.shift(1) > signal_line.shift(1)) & (macd_line < signal_line)
+                else:
+                    self.log_message(f"Unsupported entry type: {entry_type}")
+                    return False
+
+                if condition.iloc[-1]:
+                    self.log_message(f"{asset.symbol}: MACD line has crossed {'above' if entry_type == 'bullish' else 'below'} the signal line.")
+                    return True
+            else:
+                self.log_message(f"Error: MACD calculation failed or column names are incorrect for {asset.symbol}")
+
+        else:
+            if prices_df is None:
+                self.log_message(f"No historical prices data found for {asset.symbol}.")
+            elif 'close' not in prices_df.columns:
+                self.log_message(f"'Close' column missing for {asset.symbol}.")
+
+        return False
+
+
     def rsi_vs_threshold(self, asset, threshold, comparison='above'):
         """
         Compares the current Relative Strength Index (RSI) of a symbol with a given threshold and returns True if the condition is met.
