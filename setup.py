@@ -2,11 +2,12 @@ from setuptools import setup, find_packages
 
 setup(
     name="lumibot_tools",
-    version="0.1.10",
+    version="0.1.11",
     packages=find_packages(),
     install_requires=[
         'lumibot',  # Añade lumibot como una dependencia
-        'aiogram'
+        'aiogram',
+        'discord'
     ],
     scripts=['bin/run.py'],
     # Más metadata:
