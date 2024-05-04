@@ -67,14 +67,19 @@ if __name__ == "__main__":
 ### Suported platforms
 
 - Telegram
-- Discord (TODO)
+- Discord
 
 Add to your config.py file:
 
 ```
 TELEGRAM_CONFIG = {
-    "TOKEN": "<TELEGRAM TOKEN>",
+    "TOKEN": "<TELEGRAM BOT TOKEN>",
     "CHAT_ID": "<TELEGRAM CHAT ID>"
+}
+
+DISCORD_CONFIG = {
+    "TOKEN": "<DISCORD BOT TOKEN>",
+    "CHANNEL_ID": "<DISCORD CHANNEL ID>"
 }
 ```
 

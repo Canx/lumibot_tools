@@ -6,7 +6,7 @@ class DiscordBotHandler(MessageBaseHandler):
     def __init__(self, discord_config):
         super().__init__()
         self.discord_token = discord_config["TOKEN"]
-        self.channel_id = discord_config["CHANNEL"]
+        self.channel_id = discord_config["CHANNEL_ID"]
         self.channel = None
         self.command_prefix = '/'
         # Crear el cliente de Discord
