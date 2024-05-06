@@ -69,6 +69,12 @@ if __name__ == "__main__":
 - Telegram
 - Discord
 
+Commands should be called with backslash:
+
+```
+/command parameters
+```
+
 Add to your config.py file:
 
 ```
