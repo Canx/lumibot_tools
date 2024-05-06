@@ -7,7 +7,8 @@ setup(
     install_requires=[
         'lumibot',  # Añade lumibot como una dependencia
         'aiogram',
-        'discord'
+        'discord',
+        'pandas_ta'
     ],
     scripts=['bin/run.py'],
     # Más metadata:
