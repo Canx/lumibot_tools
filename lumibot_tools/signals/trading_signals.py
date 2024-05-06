@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import pandas_ta as ta
+from lumibot.entities.order import Order
 
 class Signals:
     def __init__(self, strategy):
@@ -11,6 +12,12 @@ class Signals:
     
     def log_message(self, *args, **kwargs):
         return self.strategy.log_message(*args, **kwargs)
+    
+    def get_position(self, *args, **kwargs):
+        return self.strategy.get_position(*args, **kwargs)
+    
+    def get_last_price(self, *args, **kwargs):
+        return self.strategy.get_last_price(*args, **kwargs)
 
     def new_price_high_or_low(self, asset, days, type='high'):
         """
@@ -334,32 +341,58 @@ class Signals:
             return False
 
 
-    def trailing_stop_percent(self, asset, trail_percent, lookback_period=90):
+    def trailing_stop_percent(self, asset, trail_percent):
         """
-        Implements a trailing stop based on a percentage from the peak price over a specified lookback period.
+        Implements a dynamic trailing stop based on the maximum price reached during the day.
+        The trailing stop adjusts based on the daily high price and is reset once triggered.
 
         Parameters:
-        asset (Asset):  The Asset class for the asset.
-        trail_percent (float): The percentage from the peak price at which the stop is set.
-        lookback_period (int): The number of days to look back to determine the peak price.
+        asset (Asset): The asset for which the trailing stop is being calculated.
+        trail_percent (float): The percentage below the peak price at which the trailing stop is set.
 
         Returns:
-        bool: True if the current price has fallen below the trailing stop price, False otherwise.
+        bool: True if the current price has fallen below the trailing stop price, indicating a sell signal. False otherwise.
         """
-        
-        historical_prices = self.get_historical_prices(asset, length=lookback_period)
-        prices_df = historical_prices.df if historical_prices else None
+        try:
+            # Retrieve the latest historical price data, asking for just the most recent day
+            historical_prices = self.get_historical_prices(asset, length=1)
+            if historical_prices is None or 'high' not in historical_prices.df.columns:
+                self.log_message("No valid high price data available for trailing stop calculation.")
+                return False
 
-        if prices_df is not None and 'close' in prices_df.columns:
-            latest_price = prices_df['close'].iloc[-1]
-            peak_price = prices_df['close'].max()
+            # Access the high price from the historical data
+            daily_high_price = historical_prices.df['high'].iloc[-1]
 
+            position = self.get_position(asset)
+            if position is None:
+                self.log_message("No position found for this asset.")
+                return False
+
+            # Ensure the peak_price attribute exists in position, initialize if not
+            if not hasattr(position, 'peak_price'):
+                position.peak_price = None
+            
+            # Update the peak price if the daily high is greater than the current peak price
+            if position.peak_price is None or daily_high_price > position.peak_price:
+                position.peak_price = daily_high_price
+                self.log_message(f"Updated peak_price for {asset.symbol} to {position.peak_price} based on the daily high.")
+
+            # Use the last close price to compare with the trailing stop price
+            latest_price = historical_prices.df['close'].iloc[-1]
+            peak_price = position.peak_price
             stop_price = peak_price * (1 - trail_percent / 100)
 
+            # Check if the current price is below the trailing stop price
             if latest_price < stop_price:
                 self.log_message(f"{asset.symbol}: Price {latest_price} has fallen below the trailing stop {stop_price}.")
+                position.peak_price = None  # Reset the peak price after triggering the trailing stop
                 return True
-        return False
+
+        except Exception as e:
+            self.log_message(f"An error occurred: {str(e)}")
+            return False
+
+        
     
     def trailing_stop_atr(self, asset, atr_multiplier=3, lookback_period=90):
         """
