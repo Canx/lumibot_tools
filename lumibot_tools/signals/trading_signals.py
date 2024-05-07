@@ -8,7 +8,7 @@ class Signals:
         self.strategy = strategy
 
     def get_historical_prices(self, *args, **kwargs):
-        return self.strategy.get_historical_prices(*args, **kwargs)
+        return self.strategy.get_historical_prices(timestep = self.get_timestep(), *args, **kwargs)
     
     def log_message(self, *args, **kwargs):
         return self.strategy.log_message(*args, **kwargs)
@@ -18,6 +18,9 @@ class Signals:
     
     def get_last_price(self, *args, **kwargs):
         return self.strategy.get_last_price(*args, **kwargs)
+    
+    def get_timestep(self, *args, **kwargs):
+        return self.strategy.broker.data_source.get_timestep(*args, **kwargs)
 
     def new_price_high_or_low(self, asset, days, type='high'):
         """
