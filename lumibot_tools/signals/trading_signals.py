@@ -1,3 +1,4 @@
+import math
 import numpy as np
 import pandas as pd
 import pandas_ta as ta
@@ -7,6 +8,12 @@ class Signals:
     def __init__(self, strategy):
         self.strategy = strategy
 
+    def get_sleeptime(self):
+        return self.strategy.sleeptime
+    
+    def get_timestep(self):
+        return self.strategy.broker.data_source.get_timestep()
+    
     def get_historical_prices(self, *args, **kwargs):
         return self.strategy.get_historical_prices(timestep = self.get_timestep(), *args, **kwargs)
     
@@ -22,20 +29,20 @@ class Signals:
     def get_timestep(self, *args, **kwargs):
         return self.strategy.broker.data_source.get_timestep(*args, **kwargs)
 
-    def new_price_high_or_low(self, asset, days, type='high'):
+    def new_price_high_or_low(self, asset, length, type='high'):
         """
         Checks if the latest price for a given symbol is either a new high or low over a specified number of days.
 
         Parameters:
         asset (Asset):  The Asset class for the asset.
-        days (int): The number of days over which to check for new highs or lows.
+        length (int): The number of timesteps over which to check for new highs or lows.
         type (str, optional): Specifies whether to check for a new 'high' or 'low'. Defaults to 'high'.
 
         Returns:
         bool: True if a new high or low is detected, False otherwise.
         """
 
-        historical_prices = self.get_historical_prices(asset, length=days)
+        historical_prices = self.get_historical_prices(asset, length=length)
         prices_df = historical_prices.df if historical_prices else None
 
         if prices_df is not None and 'close' in prices_df.columns:
@@ -51,7 +58,7 @@ class Signals:
                 message = "low"
 
             if condition_met:
-                self.log_message(f"{asset.symbol} has reached a new {days}-day {message} at {latest_price}.")
+                self.log_message(f"{asset.symbol} has reached a new {length}-{self.get_timestep} {message} at {latest_price}.")
                 return True
             else:
                 self.log_message(f"No {message} condition met for {asset.symbol}")
@@ -358,13 +365,15 @@ class Signals:
         """
         try:
             # Retrieve the latest historical price data, asking for just the most recent day
-            historical_prices = self.get_historical_prices(asset, length=1)
+            length = self._sleeptime_to(timestep=self.get_timestep(), sleeptime=self.get_sleeptime())
+            latest_price = self.get_last_price(asset)
+            historical_prices = self.get_historical_prices(asset, length=length)
             if historical_prices is None or 'high' not in historical_prices.df.columns:
                 self.log_message("No valid high price data available for trailing stop calculation.")
                 return False
 
             # Access the high price from the historical data
-            daily_high_price = historical_prices.df['high'].iloc[-1]
+            daily_high_price = historical_prices.df['high'].max()
 
             position = self.get_position(asset)
             if position is None:
@@ -375,15 +384,22 @@ class Signals:
             if not hasattr(position, 'peak_price'):
                 position.peak_price = None
             
-            # Update the peak price if the daily high is greater than the current peak price
-            if position.peak_price is None or daily_high_price > position.peak_price:
-                position.peak_price = daily_high_price
-                self.log_message(f"Updated peak_price for {asset.symbol} to {position.peak_price} based on the daily high.")
+            # Find the last buy order that was filled
+            last_buy_price = None
+            if position.orders:
+                for order in reversed(position.orders):  # Iterate in reverse to find the most recent
+                    if order.side == 'buy' and order.is_filled():
+                        last_buy_price = order.get_fill_price()
+                        break
+
+            # Determine the appropriate peak price
+            potential_new_peak = max(filter(None, [daily_high_price, last_buy_price]))
+            if position.peak_price is None or potential_new_peak > position.peak_price:
+                position.peak_price = potential_new_peak
+                self.log_message(f"Updated peak_price for {asset.symbol} to {position.peak_price} based on the daily high, or last buy order price.")
 
             # Use the last close price to compare with the trailing stop price
-            latest_price = historical_prices.df['close'].iloc[-1]
-            peak_price = position.peak_price
-            stop_price = peak_price * (1 - trail_percent / 100)
+            stop_price = position.peak_price * (1 - trail_percent / 100)
 
             # Check if the current price is below the trailing stop price
             if latest_price < stop_price:
@@ -575,3 +591,39 @@ class Signals:
                     ohlc['OrderBlockLevel'].iloc[i] = ohlc['high'].iloc[i]
 
         return ohlc[['OrderBlockType', 'OrderBlockLevel']]
+    
+
+    def _sleeptime_to(self, timestep="minute", sleeptime="1D"):
+        """Convert the sleeptime according to the timestep provided ('minute' or 'day'), ensuring days are returned as integers."""
+        val_err_msg = ("You can set the sleep time as an integer which will be interpreted as minutes. "
+                    "For example, sleeptime = 50 would be 50 minutes. Conversely, you can enter the time as a string "
+                    "with the duration numbers first, followed by the time units: 'M' for minutes, 'S' for seconds, "
+                    "'H' for hours, 'D' for days, e.g., '300S' is 300 seconds.")
+
+        # Default conversion is to minutes
+        if isinstance(sleeptime, int):
+            minutes = sleeptime
+        elif isinstance(sleeptime, str):
+            unit = sleeptime[-1].lower()
+            time_raw = int(sleeptime[:-1])
+
+            if unit == "s":
+                minutes = time_raw // 60
+            elif unit == "m":
+                minutes = time_raw
+            elif unit == "h":
+                minutes = time_raw * 60
+            elif unit == "d":
+                minutes = time_raw * 1440  # 24 * 60
+            else:
+                raise ValueError(val_err_msg)
+        else:
+            raise ValueError(val_err_msg)
+
+        # Convert minutes to days if required
+        if timestep.lower() == "day":
+            return math.floor(minutes / 1440)
+        elif timestep.lower() == "minute":
+            return minutes
+        else:
+            raise ValueError("Invalid timestep. Please use 'minute' or 'day'.")
