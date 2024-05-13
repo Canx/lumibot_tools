@@ -627,3 +627,129 @@ class Signals:
             return minutes
         else:
             raise ValueError("Invalid timestep. Please use 'minute' or 'day'.")
+        
+    def klinger_signal_crossover(self, asset, crossover_type='bullish', short_window=34, long_window=55, signal_window=13):
+        """
+        Identifies crossovers between the Klinger Volume Oscillator and its signal line,
+        which can indicate potential buy or sell opportunities based on the specified crossover type.
+
+        Parameters:
+        asset (Asset): The Asset class for the asset.
+        crossover_type (str): 'bullish' for bullish crossover, 'bearish' for bearish crossover.
+        short_window (int): The short period for the KVO calculation.
+        long_window (int): The long period for the KVO calculation.
+        signal_window (int): The period for the signal line (EMA of the KVO).
+
+        Returns:
+        bool: True if a crossover is detected matching the specified type, False otherwise.
+        """
+        # Get historical data required to compute the KVO
+        historical_prices = self.get_historical_prices(asset, length=max(short_window, long_window, signal_window) + long_window)
+        prices_df = historical_prices.df if historical_prices else None
+
+        if prices_df is not None and 'close' in prices_df.columns and 'volume' in prices_df.columns:
+            # Calculate the KVO and its signal line
+            kvo_df = ta.kvo(prices_df['high'], prices_df['low'], prices_df['close'], prices_df['volume'], fast=short_window, slow=long_window, signal=signal_window)
+
+            # Extract the latest and previous KVO and signal values for comparison
+            latest_kvo = kvo_df[f"KVO_{short_window}_{long_window}_{signal_window}"].iloc[-1]
+            previous_kvo = kvo_df[f"KVO_{short_window}_{long_window}_{signal_window}"].iloc[-2]
+            latest_signal = kvo_df[f"KVOs_{short_window}_{long_window}_{signal_window}"].iloc[-1]
+            previous_signal = kvo_df[f"KVOs_{short_window}_{long_window}_{signal_window}"].iloc[-2]
+
+            # Detect bullish crossover
+            if crossover_type == 'bullish':
+                if previous_kvo < previous_signal and latest_kvo > latest_signal:
+                    self.log_message(f"{asset.symbol}: KVO crossed above signal line (bullish).")
+                    return True
+            # Detect bearish crossover
+            elif crossover_type == 'bearish':
+                if previous_kvo > previous_signal and latest_kvo < latest_signal:
+                    self.log_message(f"{asset.symbol}: KVO crossed below signal line (bearish).")
+                    return True
+        else:
+            if prices_df is None:
+                self.log_message(f"No historical prices data found for {asset.symbol}.")
+            elif 'close' not in prices_df.columns or 'volume' not in prices_df.columns:
+                self.log_message(f"Missing 'close' or 'volume' column for {asset.symbol}.")
+
+        return False
+    
+    def klinger_threshold_check(self, asset, line_type='klinger', threshold=0, above=True, short_window=34, long_window=55, signal_window=13):
+        """
+        Checks if the specified Klinger line(s) is/are above or below a given threshold.
+
+        Parameters:
+        asset (Asset): The Asset class for the asset.
+        line_type (str): Specifies which line to check, 'klinger' for the Klinger line, 'signal' for the signal line, or 'both' for both lines.
+        threshold (float): The threshold value to compare against.
+        above (bool): If True, checks if the line(s) is/are above the threshold; if False, checks if below.
+        short_window (int): The short period for the KVO calculation.
+        long_window (int): The long period for the KVO calculation.
+        signal_window (int): The period for the signal line (EMA of the KVO).
+
+        Returns:
+        bool: True if the specified line(s) is/are above (or below, based on 'above' param) the threshold, False otherwise.
+        """
+        # Get historical data required to compute the KVO
+        historical_prices = self.get_historical_prices(asset, length=max(short_window, long_window, signal_window) + long_window)
+        prices_df = historical_prices.df if historical_prices else None
+
+        if prices_df is not None and 'close' in prices_df.columns and 'volume' in prices_df.columns:
+            # Calculate the KVO and its signal line
+            kvo_df = ta.kvo(prices_df['high'], prices_df['low'], prices_df['close'], prices_df['volume'], fast=short_window, slow=long_window, signal=signal_window)
+            latest_kvo = kvo_df[f"KVO_{short_window}_{long_window}_{signal_window}"].iloc[-1]
+            latest_signal = kvo_df[f"KVOs_{short_window}_{long_window}_{signal_window}"].iloc[-1]
+
+            # Determine if the latest value of the specified line is above or below the threshold
+            if line_type == 'both':
+                condition_kvo = (latest_kvo > threshold) if above else (latest_kvo < threshold)
+                condition_signal = (latest_signal > threshold) if above else (latest_signal < threshold)
+                return condition_kvo and condition_signal
+            elif line_type == 'klinger':
+                return (latest_kvo > threshold) if above else (latest_kvo < threshold)
+            elif line_type == 'signal':
+                return (latest_signal > threshold) if above else (latest_signal < threshold)
+        else:
+            if prices_df is None:
+                self.log_message(f"No historical prices data found for {asset.symbol}.")
+            elif 'close' not in prices_df.columns or 'volume' not in prices_df.columns:
+                self.log_message(f"Missing 'close' or 'volume' column for {asset.symbol}.")
+
+        return False
+    
+    def klinger_vs_signal(self, asset, above=True, short_window=34, long_window=55, signal_window=13):
+        """
+        Checks if the Klinger oscillator line is above or below its signal line.
+
+        Parameters:
+        asset (Asset): The Asset class for the asset.
+        above (bool): If True, checks if the Klinger line is above the signal line; if False, checks if it is below.
+        short_window (int): The short period for the KVO calculation.
+        long_window (int): The long period for the KVO calculation.
+        signal_window (int): The period for the signal line (EMA of the KVO).
+
+        Returns:
+        bool: True if the Klinger line is above (or below, based on 'above' param) the signal line, False otherwise.
+        """
+        # Get historical data required to compute the KVO
+        historical_prices = self.get_historical_prices(asset, length=max(short_window, long_window, signal_window) + long_window)
+        prices_df = historical_prices.df if historical_prices else None
+
+        if prices_df is not None and 'close' in prices_df.columns and 'volume' in prices_df.columns:
+            # Calculate the KVO and its signal line
+            kvo_df = ta.kvo(prices_df['high'], prices_df['low'], prices_df['close'], prices_df['volume'], fast=short_window, slow=long_window, signal=signal_window)
+            latest_kvo = kvo_df[f"KVO_{short_window}_{long_window}_{signal_window}"].iloc[-1]
+            latest_signal = kvo_df[f"KVOs_{short_window}_{long_window}_{signal_window}"].iloc[-1]
+
+            # Determine if the Klinger line is above or below the signal line
+            return (latest_kvo > latest_signal) if above else (latest_kvo < latest_signal)
+        else:
+            if prices_df is None:
+                self.log_message(f"No historical prices data found for {asset.symbol}.")
+            elif 'close' not in prices_df.columns or 'volume' not in prices_df.columns:
+                self.log_message(f"Missing 'close' or 'volume' column for {asset.symbol}.")
+
+        return False
+
+
