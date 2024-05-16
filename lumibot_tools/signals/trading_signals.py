@@ -67,6 +67,41 @@ class Signals:
 
         return False
 
+    def price_above_below_EMA(self, asset, length=200, position='above'):
+        """
+        Determines if the price of a given asset is above or below its exponential moving average (EMA).
+
+        Parameters:
+        asset (Asset): The Asset class for the asset.
+        length (int): The length of the moving average.
+        position (str): The expected position of the price relative to the EMA, either 'above' or 'below'.
+
+        Returns:
+        bool: True if the price is in the specified position relative to the EMA, False otherwise.
+        """
+
+        historical_prices = self.get_historical_prices(asset, length=length)
+        prices_df = historical_prices.df if historical_prices else None
+
+        if prices_df is not None and 'close' in prices_df.columns:
+            ema = prices_df['close'].ewm(span=length, adjust=False).mean()
+            latest_price = prices_df['close'].iloc[-1]
+            latest_ema = ema.iloc[-1]
+
+            if position == 'above' and latest_price > latest_ema:
+                self.log_message(f"{asset.symbol}: Price is above the EMA.")
+                return True
+            elif position == 'below' and latest_price < latest_ema:
+                self.log_message(f"{asset.symbol}: Price is below the EMA.")
+                return True
+            else:
+                return False
+        else:
+            if prices_df is None:
+                self.log_message(f"No historical prices data found for {asset.symbol}.")
+            elif 'close' not in prices_df.columns:
+                self.log_message(f"'Close' column missing for {asset.symbol}.")
+            return False
 
     
     def price_crosses_MA(self, asset, length=200, ma_type='SMA', cross_direction='up'):
