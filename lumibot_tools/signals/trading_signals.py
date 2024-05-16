@@ -7,7 +7,15 @@ from lumibot.entities.order import Order
 class Signals:
     def __init__(self, strategy):
         self.strategy = strategy
+        self._multiplier = None
 
+    @property
+    def multiplier(self):
+        if self._multiplier is None:
+            self._multiplier = self.get_multiplier()
+        
+        return self._multiplier
+    
     def get_sleeptime(self):
         return self.strategy.sleeptime
     
@@ -15,6 +23,9 @@ class Signals:
         return self.strategy.broker.data_source.get_timestep()
     
     def get_historical_prices(self, *args, **kwargs):
+        length = kwargs.get('length', 1)
+        length = length * self.multiplier
+        kwargs['length'] = length
         return self.strategy.get_historical_prices(timestep = self.get_timestep(), *args, **kwargs)
     
     def log_message(self, *args, **kwargs):
@@ -26,8 +37,8 @@ class Signals:
     def get_last_price(self, *args, **kwargs):
         return self.strategy.get_last_price(*args, **kwargs)
     
-    def get_timestep(self, *args, **kwargs):
-        return self.strategy.broker.data_source.get_timestep(*args, **kwargs)
+    def get_timestep(self):
+        return self.strategy.broker.data_source.get_timestep()
 
     def new_price_high_or_low(self, asset, length, type='high'):
         """
@@ -400,9 +411,8 @@ class Signals:
         """
         try:
             # Retrieve the latest historical price data, asking for just the most recent day
-            length = self._sleeptime_to(timestep=self.get_timestep(), sleeptime=self.get_sleeptime())
             latest_price = self.get_last_price(asset)
-            historical_prices = self.get_historical_prices(asset, length=length)
+            historical_prices = self.get_historical_prices(asset, length=1)
             if historical_prices is None or 'high' not in historical_prices.df.columns:
                 self.log_message("No valid high price data available for trailing stop calculation.")
                 return False
@@ -626,42 +636,6 @@ class Signals:
                     ohlc['OrderBlockLevel'].iloc[i] = ohlc['high'].iloc[i]
 
         return ohlc[['OrderBlockType', 'OrderBlockLevel']]
-    
-
-    def _sleeptime_to(self, timestep="minute", sleeptime="1D"):
-        """Convert the sleeptime according to the timestep provided ('minute' or 'day'), ensuring days are returned as integers."""
-        val_err_msg = ("You can set the sleep time as an integer which will be interpreted as minutes. "
-                    "For example, sleeptime = 50 would be 50 minutes. Conversely, you can enter the time as a string "
-                    "with the duration numbers first, followed by the time units: 'M' for minutes, 'S' for seconds, "
-                    "'H' for hours, 'D' for days, e.g., '300S' is 300 seconds.")
-
-        # Default conversion is to minutes
-        if isinstance(sleeptime, int):
-            minutes = sleeptime
-        elif isinstance(sleeptime, str):
-            unit = sleeptime[-1].lower()
-            time_raw = int(sleeptime[:-1])
-
-            if unit == "s":
-                minutes = time_raw // 60
-            elif unit == "m":
-                minutes = time_raw
-            elif unit == "h":
-                minutes = time_raw * 60
-            elif unit == "d":
-                minutes = time_raw * 1440  # 24 * 60
-            else:
-                raise ValueError(val_err_msg)
-        else:
-            raise ValueError(val_err_msg)
-
-        # Convert minutes to days if required
-        if timestep.lower() == "day":
-            return math.floor(minutes / 1440)
-        elif timestep.lower() == "minute":
-            return minutes
-        else:
-            raise ValueError("Invalid timestep. Please use 'minute' or 'day'.")
         
     def klinger_signal_crossover(self, asset, crossover_type='bullish', short_window=34, long_window=55, signal_window=13):
         """
@@ -684,7 +658,7 @@ class Signals:
 
         if prices_df is not None and 'close' in prices_df.columns and 'volume' in prices_df.columns:
             # Calculate the KVO and its signal line
-            kvo_df = ta.kvo(prices_df['high'], prices_df['low'], prices_df['close'], prices_df['volume'], fast=short_window, slow=long_window, signal=signal_window)
+            kvo_df = ta.kvo(prices_df['high'], prices_df['low'], prices_df['close'], prices_df['volume'], fast=short_window*self.multiplier, slow=long_window*self.multiplier, signal=signal_window*self.multiplier)
 
             # Extract the latest and previous KVO and signal values for comparison
             latest_kvo = kvo_df[f"KVO_{short_window}_{long_window}_{signal_window}"].iloc[-1]
@@ -727,11 +701,15 @@ class Signals:
         bool: True if the specified line(s) is/are above (or below, based on 'above' param) the threshold, False otherwise.
         """
         # Get historical data required to compute the KVO
-        historical_prices = self.get_historical_prices(asset, length=max(short_window, long_window, signal_window) + long_window)
+        length = max(short_window, long_window, signal_window) + long_window
+        historical_prices = self.get_historical_prices(asset, length=length)
         prices_df = historical_prices.df if historical_prices else None
 
         if prices_df is not None and 'close' in prices_df.columns and 'volume' in prices_df.columns:
             # Calculate the KVO and its signal line
+            short_window = short_window*self.multiplier
+            long_window = long_window*self.multiplier
+            signal_window = signal_window*self.multiplier
             kvo_df = ta.kvo(prices_df['high'], prices_df['low'], prices_df['close'], prices_df['volume'], fast=short_window, slow=long_window, signal=signal_window)
             latest_kvo = kvo_df[f"KVO_{short_window}_{long_window}_{signal_window}"].iloc[-1]
             latest_signal = kvo_df[f"KVOs_{short_window}_{long_window}_{signal_window}"].iloc[-1]
@@ -768,11 +746,16 @@ class Signals:
         bool: True if the Klinger line is above (or below, based on 'above' param) the signal line, False otherwise.
         """
         # Get historical data required to compute the KVO
-        historical_prices = self.get_historical_prices(asset, length=max(short_window, long_window, signal_window) + long_window)
+        length = (max(short_window, long_window, signal_window) + long_window)
+        historical_prices = self.get_historical_prices(asset, length=length)
         prices_df = historical_prices.df if historical_prices else None
 
         if prices_df is not None and 'close' in prices_df.columns and 'volume' in prices_df.columns:
             # Calculate the KVO and its signal line
+            short_window = short_window*self.multiplier
+            long_window = long_window*self.multiplier
+            signal_window = signal_window*self.multiplier
+
             kvo_df = ta.kvo(prices_df['high'], prices_df['low'], prices_df['close'], prices_df['volume'], fast=short_window, slow=long_window, signal=signal_window)
             latest_kvo = kvo_df[f"KVO_{short_window}_{long_window}_{signal_window}"].iloc[-1]
             latest_signal = kvo_df[f"KVOs_{short_window}_{long_window}_{signal_window}"].iloc[-1]
@@ -787,4 +770,41 @@ class Signals:
 
         return False
 
+    ### Helper methods ###
+    def get_multiplier(self):
+        return self._sleeptime_to(timestep=self.get_timestep(), sleeptime=self.get_sleeptime())
+    
+    def _sleeptime_to(self, timestep=None, sleeptime=None):
+        """Convert the sleeptime according to the timestep provided ('minute' or 'day'), ensuring days are returned as integers."""
+        val_err_msg = ("You can set the sleep time as an integer which will be interpreted as minutes. "
+                    "For example, sleeptime = 50 would be 50 minutes. Conversely, you can enter the time as a string "
+                    "with the duration numbers first, followed by the time units: 'M' for minutes, 'S' for seconds, "
+                    "'H' for hours, 'D' for days, e.g., '300S' is 300 seconds.")
 
+        # Default conversion is to minutes
+        if isinstance(sleeptime, int):
+            minutes = sleeptime
+        elif isinstance(sleeptime, str):
+            unit = sleeptime[-1].lower()
+            time_raw = int(sleeptime[:-1])
+
+            if unit == "s":
+                minutes = time_raw // 60
+            elif unit == "m":
+                minutes = time_raw
+            elif unit == "h":
+                minutes = time_raw * 60
+            elif unit == "d":
+                minutes = time_raw * 1440  # 24 * 60
+            else:
+                raise ValueError(val_err_msg)
+        else:
+            raise ValueError(val_err_msg)
+
+        # Convert minutes to days if required
+        if timestep.lower() == "day":
+            return math.floor(minutes / 1440)
+        elif timestep.lower() == "minute":
+            return minutes
+        else:
+            raise ValueError("Invalid timestep. Please use 'minute' or 'day'.")
