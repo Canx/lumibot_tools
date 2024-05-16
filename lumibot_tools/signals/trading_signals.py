@@ -7,8 +7,15 @@ from lumibot.entities.order import Order
 class Signals:
     def __init__(self, strategy):
         self.strategy = strategy
-        self.multiplier = self.multiplier()
+        self._multiplier = None
 
+    @property
+    def multiplier(self):
+        if self._multiplier is None:
+            self._multiplier = self.get_multiplier()
+        
+        return self._multiplier
+    
     def get_sleeptime(self):
         return self.strategy.sleeptime
     
@@ -30,8 +37,8 @@ class Signals:
     def get_last_price(self, *args, **kwargs):
         return self.strategy.get_last_price(*args, **kwargs)
     
-    def get_timestep(self, *args, **kwargs):
-        return self.strategy.broker.data_source.get_timestep(*args, **kwargs)
+    def get_timestep(self):
+        return self.strategy.broker.data_source.get_timestep()
 
     def new_price_high_or_low(self, asset, length, type='high'):
         """
@@ -659,12 +666,16 @@ class Signals:
         bool: True if the specified line(s) is/are above (or below, based on 'above' param) the threshold, False otherwise.
         """
         # Get historical data required to compute the KVO
-        historical_prices = self.get_historical_prices(asset, length=max(short_window, long_window, signal_window) + long_window)
+        length = max(short_window, long_window, signal_window) + long_window
+        historical_prices = self.get_historical_prices(asset, length=length)
         prices_df = historical_prices.df if historical_prices else None
 
         if prices_df is not None and 'close' in prices_df.columns and 'volume' in prices_df.columns:
             # Calculate the KVO and its signal line
-            kvo_df = ta.kvo(prices_df['high'], prices_df['low'], prices_df['close'], prices_df['volume'], fast=short_window*self.multiplier, slow=long_window*self.multiplier, signal=signal_window*self.multiplier)
+            short_window = short_window*self.multiplier
+            long_window = long_window*self.multiplier
+            signal_window = signal_window*self.multiplier
+            kvo_df = ta.kvo(prices_df['high'], prices_df['low'], prices_df['close'], prices_df['volume'], fast=short_window, slow=long_window, signal=signal_window)
             latest_kvo = kvo_df[f"KVO_{short_window}_{long_window}_{signal_window}"].iloc[-1]
             latest_signal = kvo_df[f"KVOs_{short_window}_{long_window}_{signal_window}"].iloc[-1]
 
@@ -706,7 +717,11 @@ class Signals:
 
         if prices_df is not None and 'close' in prices_df.columns and 'volume' in prices_df.columns:
             # Calculate the KVO and its signal line
-            kvo_df = ta.kvo(prices_df['high'], prices_df['low'], prices_df['close'], prices_df['volume'], fast=short_window*self.multiplier, slow=long_window*self.multiplier, signal=signal_window*self.multiplier)
+            short_window = short_window*self.multiplier
+            long_window = long_window*self.multiplier
+            signal_window = signal_window*self.multiplier
+
+            kvo_df = ta.kvo(prices_df['high'], prices_df['low'], prices_df['close'], prices_df['volume'], fast=short_window, slow=long_window, signal=signal_window)
             latest_kvo = kvo_df[f"KVO_{short_window}_{long_window}_{signal_window}"].iloc[-1]
             latest_signal = kvo_df[f"KVOs_{short_window}_{long_window}_{signal_window}"].iloc[-1]
 
@@ -720,12 +735,11 @@ class Signals:
 
         return False
 
-
     ### Helper methods ###
-    def multiplier(self):
+    def get_multiplier(self):
         return self._sleeptime_to(timestep=self.get_timestep(), sleeptime=self.get_sleeptime())
     
-    def _sleeptime_to(self, timestep="minute", sleeptime="1D"):
+    def _sleeptime_to(self, timestep=None, sleeptime=None):
         """Convert the sleeptime according to the timestep provided ('minute' or 'day'), ensuring days are returned as integers."""
         val_err_msg = ("You can set the sleep time as an integer which will be interpreted as minutes. "
                     "For example, sleeptime = 50 would be 50 minutes. Conversely, you can enter the time as a string "
