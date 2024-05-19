@@ -16,6 +16,9 @@ class Signals:
         
         return self._multiplier
     
+    def datetime(self):
+        return self.strategy.broker.datetime
+    
     def get_sleeptime(self):
         return self.strategy.sleeptime
     
@@ -39,6 +42,7 @@ class Signals:
     
     def get_timestep(self):
         return self.strategy.broker.data_source.get_timestep()
+    
 
     def new_price_high_or_low(self, asset, length, type='high'):
         """
