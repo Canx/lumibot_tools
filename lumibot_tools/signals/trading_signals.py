@@ -8,6 +8,7 @@ class Signals:
     def __init__(self, strategy):
         self.strategy = strategy
         self._multiplier = None
+        self.signal_history = {}
 
     @property
     def multiplier(self):
@@ -16,7 +17,7 @@ class Signals:
         
         return self._multiplier
     
-    def datetime(self):
+    def get_datetime(self):
         return self.strategy.broker.datetime
     
     def get_sleeptime(self):
@@ -43,19 +44,95 @@ class Signals:
     def get_timestep(self):
         return self.strategy.broker.data_source.get_timestep()
     
+    ## Cache methods ##
+    def generate_cache_key(self, method_name, symbol, current_date, *args):
+        return (method_name, symbol, current_date) + args
+    
+    # Cache aware signal
+    def price_crosses_MA(self, asset, length=200, ma_type='SMA', cross_direction='up'):
+        """
+        Determines if the price of a given symbol has crossed its moving average in a specified direction.
 
+        Parameters:
+        asset (Asset): The Asset class price_crosses_MA the asset.
+        length (int): The length of the moving average.
+        ma_type (str): Type of moving average, either 'SMA' (Simple Moving Average) or 'EMA' (Exponential Moving Average).
+        cross_direction (str): The direction of the cross, either 'up' for upward or 'down' for downward.
+
+        Returns:
+        bool: True if the price crosses the moving average as specified, False otherwise.
+        """
+        current_date = self.get_datetime().date()
+
+        # Generate a unique key for the signal
+        cache_key = self.generate_cache_key("price_crosses_MA", asset.symbol, current_date, length, ma_type, cross_direction)
+
+        # Check if the signal already exists for the current date
+        if cache_key in self.signal_history:
+            return self.signal_history[cache_key]
+        
+        historical_prices = self.get_historical_prices(asset, length=length+1)
+        prices_df = historical_prices.df if historical_prices else None
+
+        if prices_df is not None and 'close' in prices_df.columns:
+            if ma_type == 'SMA':
+                ma = prices_df['close'].rolling(window=length).mean()
+            elif ma_type == 'EMA':
+                ma = prices_df['close'].ewm(span=length, adjust=False).mean()
+            else:
+                self.log_message(f"Unsupported MA type: {ma_type}")
+                return False
+
+            latest_price = prices_df['close'].iloc[-1]
+            previous_price = prices_df['close'].iloc[-2]
+            latest_ma = ma.iloc[-1]
+            previous_ma = ma.iloc[-2]
+
+            signal_triggered = False
+
+            if cross_direction == 'up':
+                if previous_price < previous_ma and latest_price > latest_ma:
+                    self.log_message(f"{asset.symbol}: Price crossed above {ma_type} from below.")
+                    signal_triggered = True
+            elif cross_direction == 'down':
+                if previous_price > previous_ma and latest_price < latest_ma:
+                    self.log_message(f"{asset.symbol}: Price crossed below {ma_type} from above.")
+                    signal_triggered = True
+
+            # Update signal history with datetime
+            self.signal_history[cache_key] = signal_triggered
+
+            return signal_triggered
+        else:
+            if prices_df is None:
+                self.log_message(f"No historical prices data found for {asset.symbol}.")
+            elif 'close' not in prices_df.columns:
+                self.log_message(f"'Close' column missing for {asset.symbol}.")
+
+        return False
+    
+    # Cache aware
     def new_price_high_or_low(self, asset, length, type='high'):
         """
         Checks if the latest price for a given symbol is either a new high or low over a specified number of days.
 
         Parameters:
-        asset (Asset):  The Asset class for the asset.
+        asset (Asset): The Asset class for the asset.
         length (int): The number of timesteps over which to check for new highs or lows.
         type (str, optional): Specifies whether to check for a new 'high' or 'low'. Defaults to 'high'.
 
         Returns:
         bool: True if a new high or low is detected, False otherwise.
         """
+
+        current_date = self.get_datetime().date()
+
+        # Generate a unique key for the signal
+        cache_key = self.generate_cache_key("new_price_high_or_low", asset.symbol, current_date, length, type)
+
+        # Check if the signal already exists for the current date
+        if cache_key in self.signal_history:
+            return self.signal_history[cache_key]
 
         historical_prices = self.get_historical_prices(asset, length=length)
         prices_df = historical_prices.df if historical_prices else None
@@ -64,8 +141,8 @@ class Signals:
             latest_price = prices_df['close'].iloc[-1]
 
             if type == 'high':
-                extreme_value = prices_df['close'].iloc[:-1].max() 
-                condition_met = latest_price > extreme_value 
+                extreme_value = prices_df['close'].iloc[:-1].max()
+                condition_met = latest_price > extreme_value
                 message = "high"
             else:
                 extreme_value = prices_df['close'].iloc[:-1].min()
@@ -73,10 +150,14 @@ class Signals:
                 message = "low"
 
             if condition_met:
-                self.log_message(f"{asset.symbol} has reached a new {length}-{self.get_timestep} {message} at {latest_price}.")
-                return True
+                self.log_message(f"{asset.symbol} has reached a new {length}-{self.get_timestep()} {message} at {latest_price}.")
             else:
                 self.log_message(f"No {message} condition met for {asset.symbol}")
+
+            # Update signal history with datetime
+            self.signal_history[cache_key] = condition_met
+
+            return condition_met
         else:
             self.log_message(f"Error: No 'close' price available for {asset.symbol}")
 
@@ -117,54 +198,6 @@ class Signals:
             elif 'close' not in prices_df.columns:
                 self.log_message(f"'Close' column missing for {asset.symbol}.")
             return False
-
-    
-    def price_crosses_MA(self, asset, length=200, ma_type='SMA', cross_direction='up'):
-        """
-        Determines if the price of a given symbol has crossed its moving average in a specified direction.
-
-        Parameters:
-        asset (Asset):  The Asset class for the asset.
-        length (int): The length of the moving average.
-        ma_type (str): Type of moving average, either 'SMA' (Simple Moving Average) or 'EMA' (Exponential Moving Average).
-        cross_direction (str): The direction of the cross, either 'up' for upward or 'down' for downward.
-
-        Returns:
-        bool: True if the price crosses the moving average as specified, False otherwise.
-        """
-
-        historical_prices = self.get_historical_prices(asset, length=length+1)
-        prices_df = historical_prices.df if historical_prices else None
-
-        if prices_df is not None and 'close' in prices_df.columns:
-            if ma_type == 'SMA':
-                ma = prices_df['close'].rolling(window=length).mean()
-            elif ma_type == 'EMA':
-                ma = prices_df['close'].ewm(span=length, adjust=False).mean()
-            else:
-                self.log_message(f"Unsupported MA type: {ma_type}")
-                return False
-
-            latest_price = prices_df['close'].iloc[-1]
-            previous_price = prices_df['close'].iloc[-2]
-            latest_ma = ma.iloc[-1]
-            previous_ma = ma.iloc[-2]
-
-            if cross_direction == 'up':
-                if previous_price < previous_ma and latest_price > latest_ma:
-                    self.log_message(f"{asset.symbol}: Price crossed above {ma_type} from below.")
-                    return True
-            elif cross_direction == 'down':
-                if previous_price > previous_ma and latest_price < latest_ma:
-                    self.log_message(f"{asset.symbol}: Price crossed below {ma_type} from above.")
-                    return True
-        else:
-            if prices_df is None:
-                self.log_message(f"No historical prices data found for {asset.symbol}.")
-            elif 'close' not in prices_df.columns:
-                self.log_message(f"'Close' column missing for {asset.symbol}.")
-
-        return False
     
     def ma_crosses(self, asset, short_length=50, long_length=200, ma_type='SMA', cross='bullish'):
         """
