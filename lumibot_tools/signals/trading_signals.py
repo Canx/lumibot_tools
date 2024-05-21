@@ -48,6 +48,24 @@ class Signals:
     def generate_cache_key(self, method_name, symbol, current_date, *args):
         return (method_name, symbol, current_date) + args
     
+    def filter_signals(self, symbol, start_date, **kwargs):
+        """
+        Filters the signal history for a given symbol, start date, and additional parameters.
+
+        Parameters:
+        symbol (str): The symbol of the asset.
+        start_date (datetime): The start date to filter signals from.
+        **kwargs: Additional parameters to filter signals.
+
+        Returns:
+        List[Tuple]: A list of tuples containing the filtered signals.
+        """
+        filtered_signals = [
+            (method, sym, dt, *params, sig) for (method, sym, dt, *params), sig in self.signal_history.items()
+            if sym == symbol and dt >= start_date.date() and all(kwargs[key] == params[i] for i, key in enumerate(kwargs))
+        ]
+        return filtered_signals
+    
     # Cache aware signal
     def price_crosses_MA(self, asset, length=200, ma_type='SMA', cross_direction='up'):
         """
@@ -163,6 +181,7 @@ class Signals:
 
         return False
 
+    # cache aware
     def price_above_below_EMA(self, asset, length=200, position='above'):
         """
         Determines if the price of a given asset is above or below its exponential moving average (EMA).
@@ -175,6 +194,16 @@ class Signals:
         Returns:
         bool: True if the price is in the specified position relative to the EMA, False otherwise.
         """
+        method_name = "price_above_below_EMA"
+        current_datetime = self.get_datetime()
+        current_date = current_datetime.date()
+
+        # Generate a unique key for the signal
+        cache_key = self.generate_cache_key(method_name, asset.symbol, current_date, length, position)
+
+        # Check if the signal already exists for the current date
+        if cache_key in self.signal_history:
+            return self.signal_history[cache_key]
 
         historical_prices = self.get_historical_prices(asset, length=length)
         prices_df = historical_prices.df if historical_prices else None
@@ -186,12 +215,17 @@ class Signals:
 
             if position == 'above' and latest_price > latest_ema:
                 self.log_message(f"{asset.symbol}: Price is above the EMA.")
-                return True
+                condition_met = True
             elif position == 'below' and latest_price < latest_ema:
                 self.log_message(f"{asset.symbol}: Price is below the EMA.")
-                return True
+                condition_met = True
             else:
-                return False
+                condition_met = False
+
+            # Update signal history with datetime
+            self.signal_history[cache_key] = condition_met
+
+            return condition_met
         else:
             if prices_df is None:
                 self.log_message(f"No historical prices data found for {asset.symbol}.")
@@ -204,7 +238,7 @@ class Signals:
         Detects when a short-term moving average crosses a long-term moving average.
 
         Parameters:
-        asset (Asset):  The Asset class for the asset.
+        asset (Asset): The Asset class for the asset.
         short_length (int): The period of the short-term moving average.
         long_length (int): The period of the long-term moving average.
         ma_type (str): Type of moving average, 'SMA' for simple or 'EMA' for exponential.
@@ -213,6 +247,16 @@ class Signals:
         Returns:
         bool: True if the specified cross is detected, False otherwise.
         """
+        method_name = "ma_crosses"
+        current_datetime = self.get_datetime()
+        current_date = current_datetime.date()
+
+        # Generate a unique key for the signal
+        cache_key = self.generate_cache_key(method_name, asset.symbol, current_date, short_length, long_length, ma_type, cross)
+
+        # Check if the signal already exists for the current date
+        if cache_key in self.signal_history:
+            return self.signal_history[cache_key]
 
         historical_prices = self.get_historical_prices(asset, length=max(short_length, long_length) + 1)
         prices_df = historical_prices.df if historical_prices else None
@@ -236,53 +280,42 @@ class Signals:
             else:
                 condition = (prices_df['short_ma'].shift(1) > prices_df['long_ma'].shift(1)) & (prices_df['short_ma'] < prices_df['long_ma'])
 
-            if condition.iloc[-1]:
+            condition_met = condition.iloc[-1]
+            if condition_met:
                 self.log_message(f"{asset.symbol}: Short-term MA ({short_length}) has crossed {'above' if cross == 'bullish' else 'below'} Long-term MA ({long_length}).")
-                return True
+
+            # Update signal history with datetime
+            self.signal_history[cache_key] = condition_met
+
+            return condition_met
 
         return False
-    
 
-    def ma_cross_with_atr_validation(self, asset, short_length=50, long_length=200, ma_type='SMA', cross='bullish', atr_length=14, atr_factor=1):
+    # Cache aware
+    def short_over_long_ma(self, asset, short_length=50, long_length=200, ma_type='SMA'):
         """
-        Detects moving average crosses validated by ATR to ensure the movement is backed by volatility.
+        Determines if the short-term moving average is above the long-term moving average.
 
         Parameters:
-        asset (Asset):  The Asset class for the asset.
+        asset (Asset): The Asset class for the asset.
         short_length (int): The period of the short-term moving average.
         long_length (int): The period of the long-term moving average.
-        ma_type (str): Type of moving average, either 'SMA' or 'EMA'.
-        cross (str): Type of cross, 'bullish' for short-term over long-term and 'bearish' for long-term over short-term.
-        atr_length (int): The period for calculating the Average True Range (ATR).
-        atr_factor (float): Factor to assess if the current ATR is sufficient to validate the movement.
+        ma_type (str): Type of moving average, 'SMA' for simple or 'EMA' for exponential.
 
         Returns:
-        bool: True if a cross validated by ATR is detected, False otherwise.
+        bool: True if the short-term moving average is above the long-term moving average, False otherwise.
         """
+        method_name = "short_over_long_ma"
+        current_datetime = self.get_datetime()
+        current_date = current_datetime.date()
 
-        if self.ma_crosses(asset, short_length, long_length, ma_type, cross):
-            atr = self.calculate_atr(asset, atr_length)
-            if atr is None:
-                self.log_message(f"No ATR data available for {asset.symbol}.")
-                return False
+        # Generate a unique key for the signal
+        cache_key = self.generate_cache_key(method_name, asset.symbol, current_date, short_length, long_length, ma_type)
 
-            historical_prices = self.get_historical_prices(asset, length=1)
-            if historical_prices is None or 'close' not in historical_prices.df.columns:
-                return False
-            latest_price = historical_prices.df['close'].iloc[-1]
+        # Check if the signal already exists for the current date
+        if cache_key in self.signal_history:
+            return self.signal_history[cache_key]
 
-            atr_threshold = latest_price * atr_factor / 100
-            if atr >= atr_threshold:
-                self.log_message(f"{asset.symbol}: MA cross validated by ATR at {atr}, threshold was {atr_threshold}.")
-                return True
-            else:
-                self.log_message(f"{asset.symbol}: MA cross found but ATR at {atr} below threshold {atr_threshold}, not validated.")
-                return False
-        else:
-            return False
-
-
-    def short_over_long_ma(self, asset, short_length=50, long_length=200, ma_type='SMA'):
         historical_prices = self.get_historical_prices(asset, length=max(short_length, long_length) + 1)
         prices_df = historical_prices.df if historical_prices else None
 
@@ -300,12 +333,16 @@ class Signals:
             latest_short_ma = short_ma.iloc[-1]
             latest_long_ma = long_ma.iloc[-1]
 
-            if latest_short_ma > latest_long_ma:
+            condition_met = latest_short_ma > latest_long_ma
+            if condition_met:
                 self.log_message(f"{asset.symbol}: Short-term MA ({short_length}) is above long-term MA ({long_length}).")
-                return True
             else:
                 self.log_message(f"{asset.symbol}: Short-term MA ({short_length}) is below long-term MA ({long_length}).")
-                return False
+
+            # Update signal history with datetime
+            self.signal_history[cache_key] = condition_met
+
+            return condition_met
         else:
             if prices_df is None:
                 self.log_message(f"No historical prices data found for {asset.symbol}.")
@@ -314,6 +351,7 @@ class Signals:
 
         return False
     
+    # Cache aware
     def macd_signal(self, asset, fast_length=12, slow_length=26, signal_length=9, entry_type='bullish'):
         """
         Determines if a MACD line crosses its signal line, indicating potential buy or sell signals.
@@ -328,6 +366,17 @@ class Signals:
         Returns:
         bool: True if the specified MACD crossover is detected, False otherwise.
         """
+        method_name = "macd_signal"
+        current_datetime = self.get_datetime()
+        current_date = current_datetime.date()
+
+        # Generate a unique key for the signal
+        cache_key = self.generate_cache_key(method_name, asset.symbol, current_date, fast_length, slow_length, signal_length, entry_type)
+
+        # Check if the signal already exists for the current date
+        if cache_key in self.signal_history:
+            return self.signal_history[cache_key]
+
         historical_prices = self.get_historical_prices(asset, length=max(fast_length, slow_length, signal_length) + signal_length)
         prices_df = historical_prices.df if historical_prices else None
 
@@ -352,12 +401,16 @@ class Signals:
                     self.log_message(f"Unsupported entry type: {entry_type}")
                     return False
 
-                if condition.iloc[-1]:
+                condition_met = condition.iloc[-1]
+                if condition_met:
                     self.log_message(f"{asset.symbol}: MACD line has crossed {'above' if entry_type == 'bullish' else 'below'} the signal line.")
-                    return True
+
+                # Update signal history with datetime
+                self.signal_history[cache_key] = condition_met
+
+                return condition_met
             else:
                 self.log_message(f"Error: MACD calculation failed or column names are incorrect for {asset.symbol}")
-
         else:
             if prices_df is None:
                 self.log_message(f"No historical prices data found for {asset.symbol}.")
@@ -367,18 +420,29 @@ class Signals:
         return False
 
 
+    # Cache aware
     def rsi_vs_threshold(self, asset, threshold, comparison='above'):
         """
         Compares the current Relative Strength Index (RSI) of a symbol with a given threshold and returns True if the condition is met.
 
         Parameters:
-        asset (Asset):  The Asset class for the asset.
+        asset (Asset): The Asset class for the asset.
         threshold (float): The threshold to compare against.
         comparison (str): Condition to test ('above' or 'below').
 
         Returns:
         bool: True if the RSI meets the condition specified, False otherwise.
         """
+        method_name = "rsi_vs_threshold"
+        current_datetime = self.get_current_datetime()
+        current_date = current_datetime.date()
+
+        # Generate a unique key for the signal
+        cache_key = self.generate_cache_key(method_name, asset.symbol, current_date, threshold, comparison)
+
+        # Check if the signal already exists for the current date
+        if cache_key in self.signal_history:
+            return self.signal_history[cache_key]
 
         rsi_value = self.calculate_rsi(asset)
         if rsi_value is None:
@@ -386,26 +450,42 @@ class Signals:
         
         if comparison == 'above' and rsi_value > threshold:
             self.log_message(f"RSI for {asset.symbol} is above {threshold}: {rsi_value}")
-            return True
+            condition_met = True
         elif comparison == 'below' and rsi_value < threshold:
             self.log_message(f"RSI for {asset.symbol} is below {threshold}: {rsi_value}")
-            return True
+            condition_met = True
         else:
             self.log_message(f"RSI for {asset.symbol} is {rsi_value}, does not meet the {comparison} than {threshold} condition.")
-            return False
+            condition_met = False
+
+        # Update signal history with datetime
+        self.signal_history[cache_key] = condition_met
+
+        return condition_met
     
+    # Cache aware
     def price_vs_bollinger(self, asset, comparison='above', band='upper'):
         """
         Compares the current price of an asset against a specified Bollinger Band (upper, middle, or lower) and determines if it is above or below it.
 
         Parameters:
-        asset (Asset):  The Asset class for the asset.
+        asset (Asset): The Asset class for the asset.
         comparison (str): Specifies whether to check if the price is 'above' or 'below' the band.
         band (str): Specifies which Bollinger Band to compare against ('upper', 'middle', 'lower').
 
         Returns:
         bool: True if the price meets the condition specified relative to the Bollinger Band, False otherwise.
         """
+        method_name = "price_vs_bollinger"
+        current_datetime = self.get_datetime()
+        current_date = current_datetime.date()
+
+        # Generate a unique key for the signal
+        cache_key = self.generate_cache_key(method_name, asset.symbol, current_date, comparison, band)
+
+        # Check if the signal already exists for the current date
+        if cache_key in self.signal_history:
+            return self.signal_history[cache_key]
 
         upper_band, middle_band, lower_band = self.calculate_bollinger_bands(asset)
         latest_price = self.get_historical_prices(asset, length=1).df['close'].iloc[-1]
@@ -425,13 +505,18 @@ class Signals:
 
         if comparison == 'above' and latest_price > band_value:
             self.log_message(f"{asset.symbol}: Price {latest_price} is above the {band_name}: {band_value}.")
-            return True
+            condition_met = True
         elif comparison == 'below' and latest_price < band_value:
             self.log_message(f"{asset.symbol}: Price {latest_price} is below the {band_name}: {band_value}.")
-            return True
+            condition_met = True
         else:
             self.log_message(f"{asset.symbol}: Price {latest_price} does not meet the condition of being {comparison} the {band_name} ({band_value}).")
-            return False
+            condition_met = False
+
+        # Update signal history with datetime
+        self.signal_history[cache_key] = condition_met
+
+        return condition_met
 
 
     def trailing_stop_percent(self, asset, trail_percent):
