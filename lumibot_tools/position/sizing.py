@@ -2,15 +2,15 @@ class Sizing:
 
     MAX_CRYPTO_DECIMALS = 8
 
-    def __init__(self, strategy, min_cash, trend_up=None, trend_down=None, assets=None):
+    # TODO: Specify buy and sell sizing strategy in params!
+    def __init__(self, strategy, signals, min_cash, assets=None):
         self.cash = strategy.cash
         self.assets = assets
         self.min_cash = min_cash
         self.max_crypto_decimals = Sizing.MAX_CRYPTO_DECIMALS
         self.get_historical_prices = strategy.get_historical_prices
         self.log_message = strategy.log_message
-        self.trend_up = trend_up
-        self.trend_down = trend_down
+        self.signals = signals
 
     def shares_to_buy(self, asset, price_per_share, method='basic', **kwargs):
         if method == 'basic':
@@ -55,13 +55,18 @@ class Sizing:
             return shares_to_buy
     
     def shares_to_buy_trend(self, asset, price_per_share, trend_up=None, max_percentage_per_trade=1.0):
+        
+        trend_function = trend_up
+        if not trend_up:
+            trend_function = self.trend_up_ema
+
         if price_per_share <= 0:
             return 0.0
         
         if self.cash < self.min_cash:
             return 0.0
         
-        available_cash = self.cash * max_percentage_per_trade * trend_up(asset)
+        available_cash = self.cash * max_percentage_per_trade * trend_function(asset)
         
         if asset.asset_type == "crypto":
             # Calcula y redondea la cantidad de criptomoneda a comprar según el máximo de decimales permitido
@@ -74,3 +79,20 @@ class Sizing:
             raise ValueError("Unsupported asset type")
 
         return shares_to_buy
+    
+    # Trend up strentgh (from 0 to 1)
+    def trend_up_ema(self, asset):
+        trend_signals = [
+            self.signals.price_above_below_EMA(asset, length=20, position='above'),
+            self.signals.short_over_long_ma(asset, short_length=20, long_length=50, ma_type='EMA'),
+            self.signals.short_over_long_ma(asset, short_length=50, long_length=100, ma_type='EMA'),
+            self.signals.short_over_long_ma(asset, short_length=100, long_length=200, ma_type='EMA')
+        ]
+
+        # Calcular la fuerza de la tendencia como la suma de las señales de tendencia
+        trend_strength = sum(trend_signals)
+
+        # Normalizar la fuerza de la tendencia para que esté en el rango de 0 a 1
+        normalized_trend_strength = trend_strength / len(trend_signals)
+
+        return normalized_trend_strength
