@@ -1,0 +1,4 @@
+lumibot
+aiogram
+discord
+pandas_ta

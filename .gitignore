@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 credentials.py
 config.py
+logs/

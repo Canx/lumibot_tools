@@ -11,10 +11,17 @@ class Sizing:
         self.get_historical_prices = strategy.get_historical_prices
         self.log_message = strategy.log_message
         self.signals = signals
+        self.max_percentage_per_trade=1.0
 
     def shares_to_buy(self, asset, price_per_share, method='basic', **kwargs):
+        if price_per_share <= 0:
+                return 0.0
+    
+        if self.cash < self.min_cash:
+                return 0.0
+        
         if method == 'basic':
-            return self.shares_to_buy_basic(asset, price_per_share, self.cash, **kwargs)
+            return self.shares_to_buy_basic(asset, price_per_share, **kwargs)
         elif method == 'var':
             return self.shares_to_buy_var(asset, price_per_share, **kwargs)
         elif method == 'trend':
@@ -28,16 +35,10 @@ class Sizing:
              # Sell all positions
              return position.quantity
 
-    def shares_to_buy_basic(self, asset, price_per_share, cash, max_percentage_per_trade=1.0):
-            
-            if price_per_share <= 0:
-                return 0.0
-            
-            if cash < self.min_cash:
-                return 0.0
-
+    def shares_to_buy_basic(self, asset, price_per_share):
+        
             # Calcula el cash disponible para esta operación según el máximo porcentaje permitido
-            available_cash = cash * max_percentage_per_trade 
+            available_cash = self.cash * self.max_percentage_per_trade 
 
             # Divide el cash disponible entre el número de activos elegibles
             available_cash_per_asset = available_cash / len(self.assets)
@@ -54,7 +55,7 @@ class Sizing:
 
             return shares_to_buy
     
-    def shares_to_buy_trend(self, asset, price_per_share, trend_up=None, max_percentage_per_trade=1.0):
+    def shares_to_buy_trend(self, asset, price_per_share, trend_up=None):
         
         trend_function = trend_up
         if not trend_up:
@@ -66,7 +67,7 @@ class Sizing:
         if self.cash < self.min_cash:
             return 0.0
         
-        available_cash = self.cash * max_percentage_per_trade * trend_function(asset)
+        available_cash = self.cash * self.max_percentage_per_trade * trend_function(asset)
         
         if asset.asset_type == "crypto":
             # Calcula y redondea la cantidad de criptomoneda a comprar según el máximo de decimales permitido
