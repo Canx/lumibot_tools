@@ -780,7 +780,10 @@ class Signals:
 
         if prices_df is not None and 'close' in prices_df.columns and 'volume' in prices_df.columns:
             # Calculate the KVO and its signal line
-            kvo_df = ta.kvo(prices_df['high'], prices_df['low'], prices_df['close'], prices_df['volume'], fast=short_window*self.multiplier, slow=long_window*self.multiplier, signal=signal_window*self.multiplier)
+            short_window = short_window*self.multiplier
+            long_window = long_window*self.multiplier
+            signal_window = signal_window*self.multiplier
+            kvo_df = ta.kvo(prices_df['high'], prices_df['low'], prices_df['close'], prices_df['volume'], fast=short_window, slow=long_window, signal=signal_window)
 
             # Extract the latest and previous KVO and signal values for comparison
             latest_kvo = kvo_df[f"KVO_{short_window}_{long_window}_{signal_window}"].iloc[-1]
