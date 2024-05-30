@@ -896,14 +896,15 @@ class Signals:
         return False
 
 
-    # Use this in exit signals to avoid whipsaws
-    def avoid_whipsaw_exit(self, asset, atr_multiplier=1):
+    def avoid_whipsaw_exit(self, asset, indicator_length=20, indicator_type='SMA', atr_multiplier=1):
         """
-        Evaluates if the current price of the asset is within a band of +/- ATR around the entry price,
+        Evaluates if the current price of the asset is within a band of +/- ATR around the indicator value at the time of entry,
         to avoid exiting during whipsaws in trend following strategies.
 
         Parameters:
         asset (Asset): The asset being evaluated.
+        indicator_length (int): The length of the indicator (e.g., moving average).
+        indicator_type (str): The type of indicator, either 'SMA' or 'EMA'.
         atr_multiplier (float): The multiplier for the ATR to set the band limits.
 
         Returns:
@@ -915,18 +916,40 @@ class Signals:
             return False
 
         # Find the last buy order that was filled
+        entry_indicator_value = None
         entry_price = None
+        entry_datetime = None
         for order in reversed(position.orders):
             if order.side == 'buy' and order.is_filled():
                 entry_price = order.get_fill_price()
+                entry_datetime = order.get_filled_datetime()
                 break
 
-        if entry_price is None:
+        if entry_price is None or entry_datetime is None:
             self.log_message(f"No filled buy orders found for {asset.symbol}.")
             return False
 
+        # Get historical prices up to the entry time
+        historical_prices = self.get_historical_prices(asset, length=indicator_length, end_date=entry_datetime)
+        prices_df = historical_prices.df if historical_prices else None
+
+        if prices_df is not None and 'close' in prices_df.columns:
+            if indicator_type == 'SMA':
+                indicator_values = prices_df['close'].rolling(window=indicator_length).mean()
+            elif indicator_type == 'EMA':
+                indicator_values = prices_df['close'].ewm(span=indicator_length, adjust=False).mean()
+            else:
+                self.log_message(f"Unsupported indicator type: {indicator_type}")
+                return False
+
+            entry_indicator_value = indicator_values.iloc[-1]
+
+        if entry_indicator_value is None:
+            self.log_message(f"Unable to calculate indicator value at entry for {asset.symbol}.")
+            return False
+
         current_date = self.get_datetime().date()
-        cache_key = self.generate_cache_key("avoid_whipsaw_exit", asset.symbol, current_date, entry_price, atr_multiplier)
+        cache_key = self.generate_cache_key("avoid_whipsaw_exit", asset.symbol, current_date, entry_indicator_value, atr_multiplier)
 
         if cache_key in self.signal_history:
             return self.signal_history[cache_key]
@@ -936,8 +959,8 @@ class Signals:
             self.log_message(f"Unable to calculate ATR for {asset.symbol}.")
             return False
 
-        upper_band = entry_price + atr_multiplier * atr
-        lower_band = entry_price - atr_multiplier * atr
+        upper_band = entry_indicator_value + atr_multiplier * atr
+        lower_band = entry_indicator_value - atr_multiplier * atr
         current_price = self.get_last_price(asset)
 
         if lower_band <= current_price <= upper_band:
