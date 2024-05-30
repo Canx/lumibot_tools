@@ -922,7 +922,7 @@ class Signals:
         for order in reversed(position.orders):
             if order.side == 'buy' and order.is_filled():
                 entry_price = order.get_fill_price()
-                entry_datetime = order.get_filled_datetime()
+                entry_datetime = order.date_created
                 break
 
         if entry_price is None or entry_datetime is None:
