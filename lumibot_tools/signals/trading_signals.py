@@ -895,6 +895,62 @@ class Signals:
 
         return False
 
+
+    # Use this in exit signals to avoid whipsaws
+    def avoid_whipsaw_exit(self, asset, atr_multiplier=1):
+        """
+        Evaluates if the current price of the asset is within a band of +/- ATR around the entry price,
+        to avoid exiting during whipsaws in trend following strategies.
+
+        Parameters:
+        asset (Asset): The asset being evaluated.
+        atr_multiplier (float): The multiplier for the ATR to set the band limits.
+
+        Returns:
+        bool: False if the current price is within the band, indicating no exit should occur. True otherwise.
+        """
+        position = self.get_position(asset)
+        if position is None or not position.orders:
+            self.log_message(f"No position or orders found for {asset.symbol}.")
+            return False
+
+        # Find the last buy order that was filled
+        entry_price = None
+        for order in reversed(position.orders):
+            if order.side == 'buy' and order.is_filled():
+                entry_price = order.get_fill_price()
+                break
+
+        if entry_price is None:
+            self.log_message(f"No filled buy orders found for {asset.symbol}.")
+            return False
+
+        current_date = self.get_datetime().date()
+        cache_key = self.generate_cache_key("avoid_whipsaw_exit", asset.symbol, current_date, entry_price, atr_multiplier)
+
+        if cache_key in self.signal_history:
+            return self.signal_history[cache_key]
+
+        atr = self.calculate_atr(asset)
+        if atr is None:
+            self.log_message(f"Unable to calculate ATR for {asset.symbol}.")
+            return False
+
+        upper_band = entry_price + atr_multiplier * atr
+        lower_band = entry_price - atr_multiplier * atr
+        current_price = self.get_last_price(asset)
+
+        if lower_band <= current_price <= upper_band:
+            self.log_message(f"{asset.symbol}: Current price {current_price} is within the band ({lower_band}, {upper_band}). No exit.")
+            signal_triggered = False
+        else:
+            self.log_message(f"{asset.symbol}: Current price {current_price} is outside the band ({lower_band}, {upper_band}). Exit signal triggered.")
+            signal_triggered = True
+
+        self.signal_history[cache_key] = signal_triggered
+        return signal_triggered
+    
+
     ### Helper methods ###
     def get_multiplier(self):
         return self._sleeptime_to(timestep=self.get_timestep(), sleeptime=self.get_sleeptime())
