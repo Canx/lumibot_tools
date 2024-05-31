@@ -896,7 +896,7 @@ class Signals:
         return False
 
 
-    def avoid_whipsaw_exit(self, asset, indicator_length=20, indicator_type='SMA', atr_multiplier=1):
+    def avoid_whipsaw_exit(self, asset, indicator_length=20, indicator_type='SMA', atr_period=14, atr_multiplier=1):
         """
         Evaluates if the current price of the asset is within a band of +/- ATR around the indicator value at the time of entry,
         to avoid exiting during whipsaws in trend following strategies.
@@ -905,6 +905,7 @@ class Signals:
         asset (Asset): The asset being evaluated.
         indicator_length (int): The length of the indicator (e.g., moving average).
         indicator_type (str): The type of indicator, either 'SMA' or 'EMA'.
+        atr_period (int): The period for calculating the ATR.
         atr_multiplier (float): The multiplier for the ATR to set the band limits.
 
         Returns:
@@ -916,24 +917,39 @@ class Signals:
             return False
 
         # Find the last buy order that was filled
-        entry_indicator_value = None
         entry_price = None
         entry_datetime = None
+
+        # TODO: Add position.last_order() to lumibot
         for order in reversed(position.orders):
             if order.side == 'buy' and order.is_filled():
-                entry_price = order.get_fill_price()
-                entry_datetime = order.date_created
+                entry_price = order.avg_fill_price
+                entry_datetime = order._date_created
                 break
 
         if entry_price is None or entry_datetime is None:
             self.log_message(f"No filled buy orders found for {asset.symbol}.")
             return False
 
-        # Get historical prices up to the entry time
-        historical_prices = self.get_historical_prices(asset, length=indicator_length, end_date=entry_datetime)
+        # Calculate the number of extra days needed for historical prices
+        current_datetime = self.get_datetime()
+        days_diff = (current_datetime - entry_datetime).days
+        extra_length = max(atr_period, indicator_length) + days_diff
+
+        # Get historical prices
+        # TODO: get_historical_prices() should have an optional end_date parameter
+        # to avoid getting extra bars
+        historical_prices = self.get_historical_prices(asset, length=extra_length)
         prices_df = historical_prices.df if historical_prices else None
 
         if prices_df is not None and 'close' in prices_df.columns:
+            # Filter the historical data up to the entry date
+            prices_df = prices_df[prices_df.index <= entry_datetime]
+
+            if len(prices_df) < indicator_length:
+                self.log_message(f"Not enough historical data to calculate the indicator for {asset.symbol}.")
+                return False
+
             if indicator_type == 'SMA':
                 indicator_values = prices_df['close'].rolling(window=indicator_length).mean()
             elif indicator_type == 'EMA':
@@ -954,7 +970,7 @@ class Signals:
         if cache_key in self.signal_history:
             return self.signal_history[cache_key]
 
-        atr = self.calculate_atr(asset)
+        atr = self.calculate_atr(asset, period=atr_period)
         if atr is None:
             self.log_message(f"Unable to calculate ATR for {asset.symbol}.")
             return False
