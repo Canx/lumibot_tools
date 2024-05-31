@@ -4,7 +4,7 @@ class Sizing:
 
     # TODO: Specify buy and sell sizing strategy in params!
     def __init__(self, strategy, signals, min_cash, assets=None):
-        self.cash = strategy.cash
+        self._strategy = strategy
         self.assets = assets
         self.min_cash = min_cash
         self.max_crypto_decimals = Sizing.MAX_CRYPTO_DECIMALS
@@ -13,11 +13,14 @@ class Sizing:
         self.signals = signals
         self.max_percentage_per_trade=1.0
 
+    def get_cash(self):
+         return self._strategy.cash
+
     def shares_to_buy(self, asset, price_per_share, method='basic', **kwargs):
         if price_per_share <= 0:
                 return 0.0
     
-        if self.cash < self.min_cash:
+        if self.get_cash() < self.min_cash:
                 return 0.0
         
         if method == 'basic':
@@ -38,7 +41,7 @@ class Sizing:
     def shares_to_buy_basic(self, asset, price_per_share):
         
             # Calcula el cash disponible para esta operación según el máximo porcentaje permitido
-            available_cash = self.cash * self.max_percentage_per_trade 
+            available_cash = self.get_cash() * self.max_percentage_per_trade 
 
             # Divide el cash disponible entre el número de activos elegibles
             available_cash_per_asset = available_cash / len(self.assets)
@@ -64,10 +67,10 @@ class Sizing:
         if price_per_share <= 0:
             return 0.0
         
-        if self.cash < self.min_cash:
+        if self.get_cash() < self.min_cash:
             return 0.0
         
-        available_cash = self.cash * self.max_percentage_per_trade * trend_function(asset)
+        available_cash = self.get_cash() * self.max_percentage_per_trade * trend_function(asset)
         
         if asset.asset_type == "crypto":
             # Calcula y redondea la cantidad de criptomoneda a comprar según el máximo de decimales permitido
