@@ -3,7 +3,7 @@ class Sizing:
     MAX_CRYPTO_DECIMALS = 8
 
     # TODO: Specify buy and sell sizing strategy in params!
-    def __init__(self, strategy, signals, min_cash, assets=None):
+    def __init__(self, strategy, signals, min_cash, assets=None, max_percent=1.0):
         self._strategy = strategy
         self.assets = assets
         self.min_cash = min_cash
@@ -11,7 +11,7 @@ class Sizing:
         self.get_historical_prices = strategy.get_historical_prices
         self.log_message = strategy.log_message
         self.signals = signals
-        self.max_percentage_per_trade=1.0
+        self.max_percentage_per_trade=max_percent
 
     def get_cash(self):
          return self._strategy.cash
@@ -25,8 +25,6 @@ class Sizing:
         
         if method == 'basic':
             return self.shares_to_buy_basic(asset, price_per_share, **kwargs)
-        elif method == 'var':
-            return self.shares_to_buy_var(asset, price_per_share, **kwargs)
         elif method == 'trend':
             return self.shares_to_buy_trend(asset, price_per_share, **kwargs)
         else:
