@@ -16,6 +16,7 @@ pip install --upgrade git+https://github.com/Canx/lumibot_tools.git
 
 - Redirects log_message to bot
 - Implement easily bot commands in Strategy adding a method *_command(parameters)
+- run strategies from command line easily with bin/run_strategy.py
 
 ### Usage
 
@@ -128,4 +129,14 @@ class ExampleStrategy(Strategy):
             if signal_function(position.asset):
                     self.exit_position(position)
     
+```
+
+## bin/run_strategy.py
+
+Add to your PATH the route to run_strategy.py
+
+Create a config.py file with the needed keys.
+
+```
+run_strategy.py <strategy_file.py> [--live] [BROKER]
 ```
