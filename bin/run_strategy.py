@@ -15,10 +15,16 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description="Run a trading strategy.")
     parser.add_argument("strategy_file", help="The filename of the strategy to run")
     parser.add_argument("--live", action="store_true", help="Run the strategy in live mode")
-    parser.add_argument("--broker", default='Kraken', choices=['IB', 'Kraken','Alpaca'], help="Broker to use for live trading (Interactive Brokers or Kraken)")
+    parser.add_argument("--broker", choices=['IB', 'Kraken','Alpaca'], help="Broker to use for live trading (Interactive Brokers or Kraken)")
     parser.add_argument("--start", help="Backtesting start date in YYYY-MM-DD format")
     parser.add_argument("--end", help="Backtesting end date in YYYY-MM-DD format")
-    return parser.parse_args()
+
+    args = parser.parse_args()
+
+    if args.live and not args.broker:
+                parser.error("--broker is required when --live is specified")
+
+    return args
 
 def find_strategy_class(module):
     """Find and return the first strategy class in the given module."""
@@ -30,7 +36,7 @@ def find_strategy_class(module):
 def configure_broker():
     """Auto-detect and configure the broker for live trading based on available credentials."""
     try:
-        from credentials import INTERACTIVE_BROKERS_CONFIG
+        from config import INTERACTIVE_BROKERS_CONFIG
         from lumibot.brokers import InteractiveBrokers
         print("Using Interactive Brokers for live trading.")
         return InteractiveBrokers(INTERACTIVE_BROKERS_CONFIG)
@@ -38,7 +44,7 @@ def configure_broker():
         pass
 
     try:
-        from credentials import KRAKEN_CONFIG
+        from config import KRAKEN_CONFIG
         from lumibot.brokers import Ccxt
         print("Using Kraken for live trading.")
         return Ccxt(KRAKEN_CONFIG)
@@ -46,16 +52,16 @@ def configure_broker():
         pass
 
     try:
-        from credentials import ALPACA_CONFIG
+        from config import ALPACA_CONFIG
         from lumibot.brokers import Alpaca
         print("Using Alpaca for live trading.")
         return Alpaca(ALPACA_CONFIG)
     except ImportError:
         pass
 
-    raise ImportError("No broker configuration found in credentials.py.")
+    raise ImportError("No broker configuration found in config.py.")
 
-def configure_quote(broker_choice):
+def configure_quote():
     """ Configure and return the quote asset. """
     return Asset(symbol="USD", asset_type="forex")
 
@@ -133,6 +139,7 @@ def run_strategy(strategy_class, is_live, broker_choice, start_date, end_date):
 if __name__ == "__main__":
     # Main execution block
     args = parse_arguments()
+
     module_name = os.path.splitext(os.path.basename(args.strategy_file))[0]
 
     try:
